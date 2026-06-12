@@ -1,0 +1,160 @@
+{
+  "project": "AutoOffice",
+  "version": "0.4.0",
+  "capabilities": [
+    {
+      "id": "autooffice.generate",
+      "service_name": "autooffice",
+      "description": "从 JSON 数据生成格式化报告（PPT/PDF/Word/LaTeX/HTML）",
+      "transport": "http",
+      "endpoint": "/api/generate",
+      "method": "POST",
+      "input_schema": {
+        "type": "object",
+        "required": ["format", "data"],
+        "properties": {
+          "format": { "type": "string", "enum": ["pptx", "pdf", "docx", "latex", "html"] },
+          "data": { "type": "object" },
+          "template": { "type": "string" },
+          "locale": { "type": "string" }
+        }
+      },
+      "idempotent": true,
+      "side_effects": false,
+      "timeout_ms": 60000
+    },
+    {
+      "id": "autooffice.summarize",
+      "service_name": "autooffice",
+      "description": "解析内容并生成摘要、Mermaid 图、概念提取",
+      "transport": "http",
+      "endpoint": "/api/summarize",
+      "method": "POST",
+      "input_schema": {
+        "type": "object",
+        "required": ["inputs"],
+        "properties": {
+          "inputs": { "type": "array", "items": { "type": "object" } }
+        }
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "route": { "type": "string" },
+          "mermaid": { "type": "string" },
+          "concepts": { "type": "array" },
+          "combinedMarkdown": { "type": "string" },
+          "totalWords": { "type": "integer" }
+        }
+      },
+      "idempotent": true,
+      "side_effects": false,
+      "timeout_ms": 30000
+    },
+    {
+      "id": "autooffice.quality",
+      "service_name": "autooffice",
+      "description": "分析文本质量，检测 AI 味，返回评分和建议",
+      "transport": "http",
+      "endpoint": "/api/quality",
+      "method": "POST",
+      "input_schema": {
+        "type": "object",
+        "required": ["text"],
+        "properties": { "text": { "type": "string" } }
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "grade": { "type": "string" },
+          "score": { "type": "number" },
+          "recommendations": { "type": "array" }
+        }
+      },
+      "idempotent": true,
+      "side_effects": false,
+      "timeout_ms": 15000
+    },
+    {
+      "id": "autooffice.enrich",
+      "service_name": "autooffice",
+      "description": "用 RAG 知识库上下文丰富 Markdown 内容",
+      "transport": "http",
+      "endpoint": "/api/enrich",
+      "method": "POST",
+      "input_schema": {
+        "type": "object",
+        "required": ["markdown"],
+        "properties": {
+          "markdown": { "type": "string" },
+          "maxQueries": { "type": "integer" },
+          "topK": { "type": "integer" }
+        }
+      },
+      "idempotent": true,
+      "side_effects": false,
+      "timeout_ms": 30000
+    },
+    {
+      "id": "autooffice.lobster.status",
+      "service_name": "autooffice",
+      "description": "PolarClaw Pilot 状态查询：项目版本、运行时间、最近事件摘要",
+      "transport": "http",
+      "endpoint": "/api/lobster/status",
+      "method": "GET",
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "project": { "type": "string" },
+          "version": { "type": "string" },
+          "uptime_ms": { "type": "number" },
+          "recent_events": { "type": "array" }
+        }
+      },
+      "idempotent": true,
+      "side_effects": false,
+      "timeout_ms": 5000
+    },
+    {
+      "id": "autooffice.lobster.health",
+      "service_name": "autooffice",
+      "description": "PolarClaw Pilot 健康检查：错误计数、最近错误、事件文件状态",
+      "transport": "http",
+      "endpoint": "/api/lobster/health",
+      "method": "GET",
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "ok": { "type": "boolean" },
+          "error_count": { "type": "number" },
+          "last_error": { "type": "object" },
+          "events_file_ok": { "type": "boolean" }
+        }
+      },
+      "idempotent": true,
+      "side_effects": false,
+      "timeout_ms": 5000
+    },
+    {
+      "id": "autooffice.lobster.test",
+      "service_name": "autooffice",
+      "description": "运行 lobster 相关测试子集，返回通过/失败/总数",
+      "transport": "http",
+      "endpoint": "/api/lobster/test",
+      "method": "GET",
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "passed": { "type": "number" },
+          "failed": { "type": "number" },
+          "total": { "type": "number" },
+          "duration_ms": { "type": "number" },
+          "error": { "type": "string" }
+        }
+      },
+      "idempotent": true,
+      "side_effects": true,
+      "timeout_ms": 35000
+    }
+  ]
+}

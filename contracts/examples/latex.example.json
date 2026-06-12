@@ -1,0 +1,33 @@
+{
+  "latex": {
+    "theme": "article",
+    "locale": "en-US",
+    "title": "A Survey of Modern Document Generation Systems",
+    "author": "AutoOffice Team",
+    "date": "2026",
+    "abstract": "This paper surveys the landscape of automated document generation systems, focusing on template-based approaches, AI-assisted content creation, and multi-format output pipelines. We analyze the trade-offs between flexibility, quality, and performance across different architectural patterns.",
+    "toc": true,
+    "sections": [
+      {
+        "heading": "Introduction",
+        "level": 1,
+        "body": "Automated document generation has become a critical capability for modern software systems. Organizations increasingly need to produce reports, presentations, and technical documents from structured data sources with minimal manual intervention."
+      },
+      {
+        "heading": "Template-Based Approaches",
+        "level": 1,
+        "body": "Template engines such as Handlebars, Jinja2, and Mustache provide a declarative way to map data to document structure. These systems excel at producing consistent output but require upfront template design effort."
+      },
+      {
+        "heading": "Evaluation Metrics",
+        "level": 1,
+        "body": "We evaluate generation systems along three axes: output fidelity (visual quality compared to manually crafted documents), latency (time from input to final output), and maintainability (effort required to add new formats or modify templates).",
+        "math": "Q = \\frac{F \\cdot (1 - L/L_{max})}{M}"
+      }
+    ],
+    "bibliography": [
+      "Knuth, D. E. (1984). The TeXbook. Addison-Wesley.",
+      "Lamport, L. (1994). LaTeX: A Document Preparation System. Addison-Wesley."
+    ]
+  }
+}

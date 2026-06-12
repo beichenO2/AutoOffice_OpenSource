@@ -1,0 +1,8 @@
+# AutoOffice .peersyncignore
+# 语法同 .gitignore：支持 * ** ? 通配符，目录前缀自动匹配子路径
+
+# presenton-upstream 是孤立 submodule，各设备本地独立维护，不参与跨设备同步
+presenton-upstream
+
+# GSD planning 自动生成的同步日志，仅本地意义
+.planning/sync-log.jsonl

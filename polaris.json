@@ -1,0 +1,467 @@
+{
+  "name": "AutoOffice",
+  "_meta": {
+    "schema_version": "1.0",
+    "last_synced_at": "2026-06-10T00:00:00+08:00"
+  },
+  "description": "多格式自动化报告生成平台（PPT、PDF、Word、LaTeX、LaTeX-PDF、HTML），含去AI化、摘要、RAG 增强、质量分析",
+  "tier": "app",
+  "status": "active",
+  "version": "0.4.0",
+  "requirements": [
+    {
+      "id": "R1",
+      "need": "从结构化 JSON 数据生成多格式报告",
+      "approach": "Handlebars 模板 + 格式专用适配器，纯 Node.js/TypeScript 管线（PPT: PptxGenJS, Word: docx, PDF: Playwright）",
+      "tech": {
+        "PptxGenJS": "4.0.1",
+        "docx": "9.x",
+        "Playwright": "1.x",
+        "Handlebars": "4.7"
+      },
+      "features": [
+        {
+          "name": "PPT 生成",
+          "status": "done",
+          "tech": [
+            "PptxGenJS 4.0.1"
+          ],
+          "interfaces": [
+            "POST /api/generate (format=pptx)"
+          ],
+          "behavior": [
+            "纯 Node.js 生成 PPTX，无 Python 依赖",
+            "7 套主题（academic/business/minimal/nord/tech/warm/slate）",
+            "支持标题页、内容页、图表 PNG 嵌入",
+            "生成时间 ~48ms"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        },
+        {
+          "name": "PDF 生成",
+          "status": "done",
+          "tech": [
+            "Playwright (Chromium)",
+            "TypeScript HTML 模板"
+          ],
+          "interfaces": [
+            "POST /api/generate (format=pdf)"
+          ],
+          "behavior": [
+            "TypeScript 生成专业排版 HTML + Playwright 渲染为 PDF",
+            "7 套主题（academic/business/minimal/elegant/technical-report/news-digest/study-notes），含封面、目录、页眉页脚",
+            "技术报告、新闻摘要、学习笔记总结三类专用 PDF 模板支持中文字体嵌入、表格、代码块、引用块",
+            "目录页提供章节内链，章节末尾提供弱视觉返回总述按钮",
+            "冷启动 ~1.1s（含 Chromium 启动），热模式 ~0.58s",
+            "浏览器池复用，无 Python 依赖"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        },
+        {
+          "name": "Word 生成",
+          "status": "done",
+          "tech": [
+            "docx (dolanmiu) 9.x"
+          ],
+          "interfaces": [
+            "POST /api/generate (format=docx)"
+          ],
+          "behavior": [
+            "纯 Node.js/TypeScript 生成 DOCX，无 Python 依赖",
+            "3 套主题（academic/business/minimal）",
+            "支持表格、图片、页眉页脚、目录",
+            "生成时间 ~70ms"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        },
+        {
+          "name": "HTML 生成",
+          "status": "done",
+          "tech": [
+            "Handlebars"
+          ],
+          "interfaces": [
+            "POST /api/generate (format=html)"
+          ],
+          "behavior": [
+            "纯 Node 渲染，无外部依赖"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        },
+        {
+          "name": "LaTeX 生成",
+          "status": "done",
+          "tech": [
+            "Handlebars"
+          ],
+          "interfaces": [
+            "POST /api/generate (format=latex)"
+          ],
+          "behavior": [
+            "生成 .tex 源文件"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        },
+        {
+          "name": "LaTeX-PDF 编译",
+          "status": "done",
+          "tech": [
+            "xelatex (TeX Live)"
+          ],
+          "interfaces": [
+            "POST /api/generate (format=latex-pdf)"
+          ],
+          "behavior": [
+            "xelatex 编译学术论文 PDF（需 TeX Live）",
+            "内置 5 套模板：article / report / beamer / cvpr / uestc-thesis",
+            "CVPR 投稿格式（双栏、10pt、letterpaper）",
+            "电子科技大学学士毕业论文格式（中英文切换）"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        },
+        {
+          "name": "去AI化处理",
+          "status": "done",
+          "tech": [
+            "自研规则引擎"
+          ],
+          "behavior": [
+            "规则化去除生成文本中的 AI 腔调（deai.ts）"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        }
+      ],
+      "blockers": []
+    },
+    {
+      "id": "R2",
+      "need": "内容处理能力：摘要、RAG 增强、质量分析",
+      "approach": "HTTP API + CLI 命令，路由到 KnowLever/LLMWiki 等后端服务",
+      "features": [
+        {
+          "name": "摘要（summarize）",
+          "status": "done",
+          "interfaces": [
+            "POST /api/summarize"
+          ],
+          "behavior": [
+            "解析内容、生成 Mermaid 架构图、智能路由到 LLMWiki/KnowLever"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        },
+        {
+          "name": "RAG 增强（enrich）",
+          "status": "done",
+          "interfaces": [
+            "POST /api/enrich"
+          ],
+          "behavior": [
+            "从 KnowLever 知识库检索相关上下文补充文档"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        },
+        {
+          "name": "质量分析（quality）",
+          "status": "done",
+          "interfaces": [
+            "POST /api/quality"
+          ],
+          "behavior": [
+            "去AI检测、单调性评分、多样性分析，返回 A-F 等级"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        },
+        {
+          "name": "批量生成（batch）",
+          "status": "done",
+          "behavior": [
+            "同一数据同时生成多种格式"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        },
+        {
+          "name": "模板画廊（templates）",
+          "status": "done",
+          "interfaces": [
+            "GET /api/templates",
+            "GET /api/templates/:id",
+            "POST /api/templates",
+            "PUT /api/templates/:id",
+            "DELETE /api/templates/:id"
+          ],
+          "behavior": [
+            "6 套内置模板 + 用户自定义模板",
+            "用户通过 POST /api/templates 提交自定义模板（id/name/source/format）",
+            "自定义模板持久化到 ~/.autooffice/templates/，支持 CRUD",
+            "模板补充通道：用户描述需求（如'中国药科大学学士论文模板 LaTeX'）→ digist 搜索下载 → AutoOffice 拆解为资源文件+Skill"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        }
+      ],
+      "blockers": []
+    },
+    {
+      "id": "R3",
+      "need": "图表渲染与文档嵌入",
+      "approach": "Mermaid CLI (mmdc) 渲染流程图/架构图为 PNG/SVG，自动嵌入 PPT/PDF/Word/LaTeX 各格式文档",
+      "features": [
+        {
+          "name": "Mermaid 渲染",
+          "status": "done",
+          "tech": [
+            "Mermaid CLI",
+            "Playwright"
+          ],
+          "behavior": [
+            "4 种主题（default/dark/forest/neutral）",
+            "Playwright 渲染 Mermaid HTML 为 PNG",
+            "源码回退：无 Chromium 环境时输出文本摘要"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        },
+        {
+          "name": "图表嵌入",
+          "status": "done",
+          "tech": [
+            "TypeScript"
+          ],
+          "behavior": [
+            "自动嵌入渲染结果到 PPT/PDF/Word/LaTeX 文档",
+            "多格式适配（PptxDeckPayload/PdfReportPayload/DocxReportPayload/LatexReportPayload）"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "R4",
+      "need": "HTTP API 服务与外部工具集成",
+      "approach": "Express HTTP 服务器暴露所有生成/摘要/RAG/质量分析能力为 REST API，集成 KnowLever/LLMWiki/OfficeCLI 等外部工具",
+      "features": [
+        {
+          "name": "HTTP API 服务",
+          "status": "done",
+          "tech": [
+            "Express",
+            "DOMPurify"
+          ],
+          "interfaces": [
+            "POST /api/generate",
+            "POST /api/summarize",
+            "POST /api/enrich",
+            "POST /api/quality",
+            "GET/POST/PUT/DELETE /api/templates/*"
+          ],
+          "behavior": [
+            "统一 REST API 入口",
+            "HTML 净化（DOMPurify）"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        },
+        {
+          "name": "外部工具检测",
+          "status": "done",
+          "tech": [
+            "TypeScript"
+          ],
+          "behavior": [
+            "自动检测 OfficeCLI/LibreOffice/Pandoc 等外部工具可用性",
+            "服务环境 PATH 不完整时使用 ~/.local/bin、/opt/homebrew/bin、/Applications/LibreOffice.app 等绝对路径候选进行探测",
+            "2026-04-28 验证 SOTAgent 重启后的 /health 中 OfficeCLI、LibreOffice、Pandoc 均为 ok",
+            "生成工具摘要供报告参考"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        },
+        {
+          "name": "PolarClaw Pilot Adapter",
+          "status": "done",
+          "tech": [
+            "TypeScript"
+          ],
+          "interfaces": [
+            "GET /api/lobster/status",
+            "GET /api/lobster/health",
+            "GET /api/lobster/test"
+          ],
+          "behavior": [
+            "错误路径（API 5xx、CLI 非 0、theme 校验失败）自动写入 lobster-events.jsonl",
+            "事件 schema 对齐 SOTAgent 统一定义：{ts, type, source_project, target_project?, severity, payload, dedup_key}",
+            "status adapter 返回项目版本、运行时间、最近事件摘要",
+            "health adapter 返回错误计数和最近错误详情",
+            "test adapter 通过 vitest 运行 lobster 测试子集",
+            "过渡期使用本地 JSONL 传输，SOTAgent 事件总线就绪后可切换 HTTP POST",
+            "60 秒内同 dedup_key 事件自动去重",
+            "JSONL 超 5MB 自动轮换"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "R5",
+      "need": "AI 驱动 PPT 生成（Presenton 集成）",
+      "approach": "集成 Presenton（Apache 2.0 开源）作为 AI PPT 引擎，Docker 部署，通过 llama.cpp 调用本地 LLM",
+      "tech": {
+        "Presenton": "latest",
+        "Docker": "28.x",
+        "llama.cpp": "local"
+      },
+      "features": [
+        {
+          "name": "AI PPT 生成",
+          "status": "done",
+          "interfaces": [
+            "POST /api/generate/ai"
+          ],
+          "behavior": [
+            "Prompt → LLM Proxy 生成结构化内容 → PptxGenJS 渲染 → 可编辑 .pptx",
+            "默认通过 PolarPrivate LLM Proxy（CodingPlan/DashScope），自动注入 API Key",
+            "支持 ?backend=presenton 回退到 Presenton Docker",
+            "内置去AI化处理（stripAiFlavorDeep）",
+            "7 套主题可选，4 种语气模式"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        },
+        {
+          "name": "Presenton 健康检查",
+          "status": "done",
+          "interfaces": [
+            "GET /api/presenton/health"
+          ],
+          "behavior": [
+            "检测 Presenton Docker 容器运行状态",
+            "返回健康/异常状态信息"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        }
+      ],
+      "blockers": []
+    },
+    {
+      "id": "R6",
+      "need": "VLM 视觉质量评估",
+      "approach": "PolarPrivate L101/L100（Ollama VLM 经 :12790 转发）；不暴露具体模型名",
+      "tech": {
+        "PolarPrivate": "L101 默认视觉 / L100 升级",
+        "Ollama": "服务端映射（OLLAMA_MODEL_L101 等 env）"
+      },
+      "features": [
+        {
+          "name": "视觉 QA",
+          "status": "done",
+          "interfaces": [
+            "POST /api/visual-qa"
+          ],
+          "behavior": [
+            "接收 base64 PNG 截图，返回 5 维度评分（排版/留白/配色/字体/信息密度）",
+            "视觉质检固定 L101（VLM）；文本 L000/L100",
+            "返回 opaque L 代码、backend、A-F 等级、问题与改进建议"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        },
+        {
+          "name": "VLM 健康检查",
+          "status": "done",
+          "interfaces": [
+            "GET /api/visual-qa/health"
+          ],
+          "behavior": [
+            "探测 PolarPrivate 与本地 L-tier，返回 preferred 与 L 代码"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        }
+      ],
+      "blockers": []
+    }
+  ],
+  "tech": {
+    "runtime": {
+      "node": ">=20"
+    },
+    "framework": "Express + Handlebars",
+    "document_engines": {
+      "PptxGenJS": "4.0.1",
+      "docx": "9.x",
+      "Playwright": "1.x"
+    },
+    "external_tools": {
+      "OfficeCLI": "1.0.60",
+      "LibreOffice": "26.2",
+      "Pandoc": "3.7"
+    },
+    "test": "Vitest（28+ 测试文件）"
+  },
+  "service_management": {
+    "install_command": "npm ci",
+    "start_command": "node dist/cli.js serve --port ${PORT:-3900}",
+    "restart_command": "node dist/cli.js serve --port ${PORT:-3900}",
+    "health_endpoint": "http://127.0.0.1:3900/health"
+  },
+  "contacts": {
+    "last_updated": "2026-05-01",
+    "updated_by": "solo-web-a4a78726"
+  }
+}

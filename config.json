@@ -1,0 +1,11 @@
+{
+  "version": 0,
+  "automation_preset": "full_auto",
+  "intervention_matrix": {
+    "discuss": "auto",
+    "research": "auto",
+    "plan": "auto",
+    "execute": "auto",
+    "verify": "auto"
+  }
+}

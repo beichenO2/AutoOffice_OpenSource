@@ -1,0 +1,43 @@
+{
+  "name": "autooffice",
+  "version": "0.4.0",
+  "private": false,
+  "type": "module",
+  "bin": {
+    "autooffice": "./dist/cli.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "serve": "node dist/cli.js serve --port ${PORT:-3900}",
+    "start": "node dist/cli.js"
+  },
+  "dependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "commander": "^14.0.3",
+    "docx": "^9.6.1",
+    "dompurify": "^3.3.3",
+    "express": "^5.2.1",
+    "handlebars": "^4.7.8",
+    "jsdom": "^26.1.0",
+    "jszip": "^3.10.1",
+    "mermaid": "^11.14.0",
+    "playwright": "^1.59.1",
+    "pptxgenjs": "^4.0.1",
+    "svgdom": "^0.1.23"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/jsdom": "^28.0.1",
+    "@types/node": "^22.10.0",
+    "@types/svgdom": "^0.1.2",
+    "@vitest/coverage-v8": "^2.1.9",
+    "ajv": "^8.20.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
+  }
+}

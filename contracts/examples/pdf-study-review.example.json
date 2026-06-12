@@ -1,0 +1,33 @@
+{
+  "pdf": {
+    "theme": "study-review",
+    "locale": "zh-CN",
+    "title": "深度学习优化方法文献综述",
+    "subtitle": "从 SGD 到自适应优化器的演进",
+    "author": "KnowLever 自动生成",
+    "date": "2026-05-01",
+    "toc": true,
+    "sections": [
+      {
+        "heading": "综述目的与范围",
+        "level": 1,
+        "body": "本文综述近五年深度学习优化方法的发展，重点关注自适应学习率方法（Adam 系列）、二阶优化近似方法和分布式训练优化策略。研究材料主要来源于 ICML、NeurIPS、ICLR 等顶会论文。"
+      },
+      {
+        "heading": "经典方法回顾",
+        "level": 1,
+        "body": "随机梯度下降（SGD）及其带动量变体仍然是许多视觉任务的首选。学习率调度策略（cosine annealing、warmup）对最终精度有显著影响。批量大小与学习率的线性缩放关系在大规模训练中得到广泛验证。"
+      },
+      {
+        "heading": "自适应方法进展",
+        "level": 1,
+        "body": "AdamW 通过解耦权重衰减修正了 Adam 的泛化问题。LAMB 和 LARS 将自适应方法扩展到超大批量训练场景。Sophia 等二阶近似优化器在语言模型预训练中展现出优于 Adam 的收敛速度。"
+      },
+      {
+        "heading": "研究展望",
+        "level": 1,
+        "body": "优化器与模型架构的协同设计、训练稳定性的理论保障、以及超参数自动调优是未来的重要研究方向。"
+      }
+    ]
+  }
+}

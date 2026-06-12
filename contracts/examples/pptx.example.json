@@ -1,0 +1,35 @@
+{
+  "pptx": {
+    "theme": "business",
+    "locale": "zh-CN",
+    "title": "Q2 2026 项目进展汇报",
+    "subtitle": "技术团队季度总结",
+    "slides": [
+      {
+        "title": "本季度核心成果",
+        "bullets": [
+          "完成 AutoOffice 多格式报告引擎 v0.4 发布",
+          "PDF/Word/PPT 三引擎全部迁移为纯 TypeScript 实现",
+          "新增去 AI 化处理与质量分析模块",
+          "文档生成延迟降低 60%"
+        ]
+      },
+      {
+        "title": "技术架构演进",
+        "bullets": [
+          "从 Python 依赖迁移到纯 Node.js 管线",
+          "引入 Playwright 浏览器池复用优化 PDF 渲染",
+          "集成 Presenton 作为 AI PPT 生成后端"
+        ]
+      },
+      {
+        "title": "下季度计划",
+        "bullets": [
+          "建立产物契约层（contracts/），支持跨项目对接",
+          "完善 LaTeX 学术论文模板生态",
+          "引入 VLM 视觉质量评估闭环"
+        ]
+      }
+    ]
+  }
+}

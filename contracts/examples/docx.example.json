@@ -1,0 +1,35 @@
+{
+  "docx": {
+    "theme": "academic",
+    "locale": "zh-CN",
+    "title": "AutoOffice 技术设计文档",
+    "author": "技术团队",
+    "date": "2026-05-01",
+    "toc": true,
+    "sections": [
+      {
+        "heading": "系统概述",
+        "level": 1,
+        "body": "AutoOffice 是一个多格式自动化报告生成平台，支持从结构化 JSON 数据生成 PPT、PDF、Word、LaTeX 和 HTML 格式的专业文档。系统采用纯 TypeScript 实现，无 Python 运行时依赖。"
+      },
+      {
+        "heading": "架构设计",
+        "level": 1,
+        "body": "系统采用管线（pipeline）架构，核心流程为：JSON 输入 → 模板渲染 → 格式适配器 → 文件输出。每种输出格式由独立的适配器实现，通过注册机制接入统一管线。"
+      },
+      {
+        "heading": "性能指标",
+        "level": 1,
+        "body": "PPT 生成约 48ms，PDF 冷启动约 1.1s（热模式 0.58s），Word 生成约 70ms。浏览器池复用机制确保 PDF 渲染在高并发场景下保持稳定。",
+        "table": {
+          "headers": ["格式", "冷启动", "热模式", "引擎"],
+          "rows": [
+            ["PPT", "48ms", "48ms", "PptxGenJS"],
+            ["PDF", "1.1s", "0.58s", "Playwright"],
+            ["Word", "70ms", "70ms", "docx"]
+          ]
+        }
+      }
+    ]
+  }
+}

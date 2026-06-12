@@ -1,0 +1,17 @@
+{
+  "title": "AutoOffice 功能概览",
+  "sections": [
+    {
+      "title": "多格式报告生成",
+      "content": "支持 PPT、PDF、Word、LaTeX 和 HTML 五种输出格式，从统一的 JSON 输入生成专业排版的文档。"
+    },
+    {
+      "title": "去 AI 化处理",
+      "content": "内置规则引擎，自动检测并去除 AI 生成文本中的典型模式，提升输出文本的自然度和可读性。"
+    },
+    {
+      "title": "知识增强",
+      "content": "集成 KnowLever RAG 引擎，可从知识库检索相关上下文自动补充文档内容。"
+    }
+  ]
+}
