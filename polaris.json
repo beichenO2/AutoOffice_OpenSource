@@ -455,10 +455,10 @@
     "test": "Vitest（28+ 测试文件）"
   },
   "service_management": {
-    "install_command": "npm ci",
+    "health_endpoint": "http://127.0.0.1:3900/health",
     "start_command": "node dist/cli.js serve --port ${PORT:-3900}",
     "restart_command": "node dist/cli.js serve --port ${PORT:-3900}",
-    "health_endpoint": "http://127.0.0.1:3900/health"
+    "notes": "SOTA Radar: PolarProcess cron `autooffice-sota-radar` Mon 09:00 → reports/sota-radar-*.md (read-only). Auto-Evolve: PolarProcess cron `autooffice-auto-evolve` every 3d 04:00 — QA-gated minor/patch npm upgrades via Agent_core/scripts/auto-evolve.mjs; no human approval; rollback on health fail."
   },
   "contacts": {
     "last_updated": "2026-05-01",

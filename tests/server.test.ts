@@ -43,6 +43,7 @@ describe('server — HTTP API', () => {
       env: {
         ...process.env,
         AUTOOFFICE_API_WIKI_ROOT: apiWikiRoot,
+        AUTOOFFICE_DIRECT_PORT: '1',
       },
     });
     await new Promise<void>((resolve) => {

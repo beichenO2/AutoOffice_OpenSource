@@ -1,0 +1,24 @@
+# CODEOWNERS — AutoOffice
+#
+# Project: AutoOffice (tier: app, status: active)
+# Owner:   @beichenO2
+#
+# Boundary (from 任务书/260505_compiled/AutoOffice.md §3, §5):
+#   - This repository owns ALL paths under it (LLM integrations, contracts,
+#     templates, format adapters, output generators, CLI/server, tests).
+#   - PolarPrivate internals are CONSUMED ONLY via the unified `/v1/*` LLM
+#     proxy (see src/integrations/llm-proxy.ts). Do not modify PolarPrivate
+#     code from this repository — that is owned by the PolarPrivate task
+#     book entry instead.
+#   - reveal / service-session / ServiceAuth / service_token surfaces are
+#     forbidden here (260505 verification confirmed 0 matches).
+
+*                            @beichenO2
+
+# Cross-project contracts that other Polarisor repos consume — extra care.
+/contracts/                  @beichenO2
+/tests/contracts/            @beichenO2
+/capabilities.json           @beichenO2
+
+# LLM integration surfaces — touch these only via /v1/* or /proxy/* paths.
+/src/integrations/           @beichenO2

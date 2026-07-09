@@ -1,0 +1,27 @@
+{
+  "capability": "autooffice.report_gen",
+  "project": "autooffice",
+  "status": "ready",
+  "version": "0.4.0",
+  "published_at": "2026-04-10T09:45:00Z",
+  "published_by": "proxy-round2-extended",
+  "description": "完整报告系统 — 5格式生成 + 内容分析路由 + RAG丰富 + Wiki脚手架 + 批量处理 + 50+去AI规则 + 单调度检测 + 3模板",
+  "features": [
+    "generate: 结构化数据→专业报告(pptx/pdf/docx/latex/html)",
+    "summarize: 多格式输入→智能分流→Mermaid图→handoff",
+    "batch: 并行多格式批量生成",
+    "enrich: KnowLeverage RAG引擎内容丰富",
+    "wiki: LLMWiki项目脚手架自动生成",
+    "deai: 去AI味道(50+规则,中英文)",
+    "monotony: 文本单调度检测(4维度)",
+    "mermaid: 图表渲染+嵌入所有报告格式",
+    "templates: 3套专业模板(商务/学术/幻灯片)",
+    "handoff: 下游系统交接适配(LLMWiki/KnowLeverage)"
+  ],
+  "entry_points": {
+    "cli": "node dist/cli.js",
+    "http_server": "node dist/cli.js serve -p 3900",
+    "project_dir": "~/Polarisor/AutoOffice/"
+  },
+  "test_status": "249/252 passing (34 files)"
+}

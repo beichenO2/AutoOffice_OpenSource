@@ -19,14 +19,14 @@
   "dependencies": {
     "@resvg/resvg-js": "^2.6.2",
     "commander": "^14.0.3",
-    "docx": "^9.6.1",
-    "dompurify": "^3.3.3",
+    "docx": "^9.7.1",
+    "dompurify": "^3.4.11",
     "express": "^5.2.1",
     "handlebars": "^4.7.8",
     "jsdom": "^26.1.0",
     "jszip": "^3.10.1",
-    "mermaid": "^11.14.0",
-    "playwright": "^1.59.1",
+    "mermaid": "^11.16.0",
+    "playwright": "^1.61.1",
     "pptxgenjs": "^4.0.1",
     "svgdom": "^0.1.23"
   },

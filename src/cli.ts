@@ -617,10 +617,17 @@ program
   .option('-p, --port <port>', 'Port number (overridden by PORT env when set)', '3900')
   .action(async (opts) => {
     const { startServer } = await import('./server.js');
-    const sdkPath = resolve(dirname(new URL(import.meta.url).pathname), '..', '..', 'PolarPort', 'dist', 'sdk', 'index.js');
-    const { claimPort } = await import(sdkPath);
     const fromEnv = process.env.PORT ? Number.parseInt(process.env.PORT, 10) : Number.NaN;
     const preferred = Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : parseInt(opts.port, 10);
+
+    // Tests / ad-hoc runs bind the exact port without PolarPort involvement.
+    if (process.env.AUTOOFFICE_DIRECT_PORT === '1') {
+      startServer(preferred);
+      return;
+    }
+
+    const sdkPath = resolve(dirname(new URL(import.meta.url).pathname), '..', '..', 'PolarPort', 'dist', 'sdk', 'index.js');
+    const { claimPort } = await import(sdkPath);
     const port = await claimPort({ service: 'autooffice', project: 'AutoOffice', preferred, heartbeat: true });
 
     startServer(port);
