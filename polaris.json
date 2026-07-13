@@ -180,11 +180,13 @@
             "POST /api/enrich"
           ],
           "behavior": [
-            "从 KnowLever 知识库检索相关上下文补充文档"
+            "从 KnowLever 知识库检索相关上下文补充文档",
+            "灰度：AUTOOFFICE_KNOWLEVERAGE_SEARCH_V2=on + AUTOOFFICE_KNOWLEVERAGE_TOPIC=<topic> 时 queryRAG 优先走 KnowLever /api/search/v2（转译+混合召回），HTTP 失败自动回退 v1 subprocess；默认 off 零行为变化"
           ],
-          "test_status": "not_tested",
+          "test_status": "passed",
           "evidence": [
-            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)",
+            "2026-07-13: vitest tests/knowleverage-v2.test.ts 3 用例（开关判定/v2 命中拼装上下文/HTTP 失败回退 v1）+ 既有 knowleverage-config 3 用例全部通过"
           ]
         },
         {

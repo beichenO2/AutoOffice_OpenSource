@@ -16,6 +16,14 @@ const PYTHON_CANDIDATES = ['/opt/homebrew/bin/python3', 'python3'];
 export const KNOWLEVERAGE_DIR_ENV = 'AUTOOFFICE_KNOWLEVERAGE_DIR';
 export const DEFAULT_KNOWLEVERAGE_DIR = resolve(__dirname, '..', '..', '..', 'KnowLever');
 
+/** 检索 v2 灰度开关（'on' 启用；默认 off 走 v1 subprocess 路径） */
+export const KNOWLEVERAGE_SEARCH_V2_ENV = 'AUTOOFFICE_KNOWLEVERAGE_SEARCH_V2';
+/** KnowLever HTTP API 地址（v2 路径用） */
+export const KNOWLEVERAGE_API_URL_ENV = 'AUTOOFFICE_KNOWLEVERAGE_API_URL';
+/** v2 检索的 substrate topic（v2 是主题域检索，必须指定才启用） */
+export const KNOWLEVERAGE_TOPIC_ENV = 'AUTOOFFICE_KNOWLEVERAGE_TOPIC';
+export const DEFAULT_KNOWLEVERAGE_API_URL = 'http://127.0.0.1:18080';
+
 /** Must match KnowLever `rag/pipeline.py` — shared by subprocess scripts and summarize handoff metadata. */
 export const KNOWLEVERAGE_RAG_MODULE = 'rag.pipeline' as const;
 export const KNOWLEVERAGE_RAG_CLASS = 'RAGPipeline' as const;
@@ -128,6 +136,62 @@ export interface RAGQueryResult {
   query: string;
   success: boolean;
   error?: string;
+  /** 命中的检索引擎；v1 路径不写该字段（兼容既有消费方） */
+  engine?: 'v2';
+}
+
+/** v2 灰度配置；开关未开或缺 topic 时返回 null（继续走 v1） */
+export function getSearchV2Config(): { url: string; topic: string } | null {
+  if ((process.env[KNOWLEVERAGE_SEARCH_V2_ENV] ?? '').trim().toLowerCase() !== 'on') return null;
+  const topic = process.env[KNOWLEVERAGE_TOPIC_ENV]?.trim();
+  if (!topic) return null;
+  const url = (process.env[KNOWLEVERAGE_API_URL_ENV]?.trim() || DEFAULT_KNOWLEVERAGE_API_URL).replace(/\/+$/, '');
+  return { url, topic };
+}
+
+interface SearchV2Item {
+  slug: string;
+  title: string;
+  type: string;
+  file: string;
+}
+
+/**
+ * v2 路径：POST /api/search/v2（转译+混合召回），命中页面按 file 路径读正文拼上下文。
+ * 返回 null 表示 v2 不可用/失败，调用方回退 v1（灰度降级）。
+ */
+async function querySearchV2(query: string, topK: number): Promise<RAGQueryResult | null> {
+  const cfg = getSearchV2Config();
+  if (!cfg) return null;
+  try {
+    const res = await fetch(`${cfg.url}/api/search/v2`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, topic: cfg.topic, top: topK, vector: true }),
+      signal: AbortSignal.timeout(90_000),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { results?: SearchV2Item[] };
+    const items = data.results ?? [];
+    if (items.length === 0) {
+      return { context: '', query, success: true, engine: 'v2' };
+    }
+    const { readFile } = await import('node:fs/promises');
+    const parts: string[] = [];
+    for (const item of items) {
+      try {
+        const raw = await readFile(item.file, 'utf-8');
+        const body = raw.replace(/^---\n[\s\S]*?\n---\n/, '').trim().slice(0, 2000);
+        if (body) parts.push(`### ${item.title}（${item.slug}）\n\n${body}`);
+      } catch {
+        // 页面文件不可读（如跨机部署）→ 整体回退 v1
+      }
+    }
+    if (parts.length === 0) return null;
+    return { context: parts.join('\n\n'), query, success: true, engine: 'v2' };
+  } catch {
+    return null;
+  }
 }
 
 export interface EnrichmentResult {
@@ -154,8 +218,12 @@ export function normalizePositiveIntegerOption(value: unknown): number | undefin
 
 /**
  * Query KnowLeverage RAG engine for context on a topic.
+ * 灰度：AUTOOFFICE_KNOWLEVERAGE_SEARCH_V2=on 且设置 topic 时优先走 /api/search/v2，失败自动回退 v1。
  */
 export async function queryRAG(query: string, topK: number = 3): Promise<RAGQueryResult> {
+  const safeTopKV2 = Math.min(100, normalizePositiveIntegerOption(topK) ?? 3);
+  const v2 = await querySearchV2(query, safeTopKV2);
+  if (v2) return v2;
   try {
     const safeTopK = Math.min(100, normalizePositiveIntegerOption(topK) ?? 3);
     const { stdout, stderr } = await runKnowLeverageScript(
