@@ -15,6 +15,15 @@
 
 ---
 
+## 运行时权威
+
+- PolarProcess 服务 `autooffice` 是 API 唯一进程生命周期权威。
+- PolarPort 是 `3900` 的唯一端口分配与归属权威。
+- `Start/start.sh` 是由 PolarProcess 执行的前台命令；禁止后台 `&`、`nohup`、
+  PID 文件、直接信号或第二个进程管理器。
+- `autooffice-auto-evolve` 与 `autooffice-sota-radar` 是独立 cron，API 生命周期
+  操作不得修改或触发它们。
+
 ## 外部合作
 
 ### 依赖

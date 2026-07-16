@@ -2,7 +2,7 @@
   "name": "AutoOffice",
   "_meta": {
     "schema_version": "1.0",
-    "last_synced_at": "2026-06-10T00:00:00+08:00"
+    "last_synced_at": "2026-07-17T00:06:00+08:00"
   },
   "description": "多格式自动化报告生成平台（PPT、PDF、Word、LaTeX、LaTeX-PDF、HTML），含去AI化、摘要、RAG 增强、质量分析",
   "tier": "app",
@@ -437,6 +437,48 @@
         }
       ],
       "blockers": []
+    },
+    {
+      "id": "R7",
+      "need": "运行时统一由 PolarProcess 与 PolarPort 治理",
+      "feature": "runtime_governance",
+      "status": "done",
+      "approach": "PolarProcess service autooffice 是 API 唯一生命周期权威；PolarPort 是 3900 唯一端口权威；Start/start.sh 只以前台命令运行。两个既有 cron 保持独立且不参与 API 切换。",
+      "baseline": {
+        "captured_at": "2026-07-16T23:53:00+08:00",
+        "governance_audit": "drift=1: Start scripts contain direct background/kill process control",
+        "live_api": "autooffice PID 25503 on 3900, healthy, detached by nohup with PPID 1",
+        "polarport": "preferred reservation and sole active owner AutoOffice/autooffice:3900 already canonical",
+        "protected_crons": [
+          "autooffice-auto-evolve: stopped, every 3d 04:00 schedule",
+          "autooffice-sota-radar: stopped, Mon 09:00 schedule"
+        ],
+        "polarpilot_boundary": "AutoOffice is the sole monitored project and remains dormant observer-only",
+        "verification": "build-first baseline: 48 files / 384 tests passed; TypeScript build passed",
+        "preserved_user_changes": [
+          "reports/auto-evolve-202607152000.md"
+        ]
+      },
+      "behavior": [
+        "Only PolarProcess may start, stop or restart service autooffice",
+        "Only PolarPort may allocate required port 3900",
+        "Start/start.sh validates authorities and build artifacts before foreground Node 22 exec",
+        "Production serve requires POLAR_RUNTIME_MANAGED=1 and PORT=3900",
+        "AUTOOFFICE_DIRECT_PORT is accepted only in NODE_ENV=test for terminating integration tests",
+        "autooffice-auto-evolve and autooffice-sota-radar registrations are not mutated"
+      ],
+      "evidence": [
+        "2026-07-16: runtime governance design and implementation plan added",
+        "2026-07-16: managed-port guard, foreground launcher, staged registration and exact clients tested",
+        "2026-07-16: full suite grew to 50 files / 394 tests and TypeScript build passed",
+        "2026-07-17: precise autooffice restart replaced detached PID 25503 with governed Node 22 PID 79249",
+        "2026-07-17: one 3900 listener and canonical AutoOffice/autooffice owner verified; full health status ok",
+        "2026-07-17: protected cron snapshots remained byte-equivalent by normalized hashes 73c37c3b and bb55a7f7",
+        "2026-07-17: fresh completion gate passed: 50 files / 394 tests, TypeScript build, compliant audit, runtime uniqueness, cron integrity and observer config boundary",
+        "2026-07-17: PolarPilot synchronous status read timed out on 377k pending events; its health recovered with projects_monitored=1 and AutoOffice still has no daemon-config.json"
+      ],
+      "test_status": "passed",
+      "blockers": []
     }
   ],
   "tech": {
@@ -457,13 +499,19 @@
     "test": "Vitest（28+ 测试文件）"
   },
   "service_management": {
+    "service_id": "autooffice",
     "health_endpoint": "http://127.0.0.1:3900/health",
-    "start_command": "node dist/cli.js serve --port ${PORT:-3900}",
-    "restart_command": "node dist/cli.js serve --port ${PORT:-3900}",
+    "start_command": "bash Start/start.sh",
+    "restart_command": "bash Start/start.sh",
+    "preferred_port": 3900,
+    "auto_start": true,
+    "process_mode": "foreground_command",
+    "process_authority": "PolarProcess",
+    "port_authority": "PolarPort",
     "notes": "SOTA Radar: PolarProcess cron `autooffice-sota-radar` Mon 09:00 → reports/sota-radar-*.md (read-only). Auto-Evolve: PolarProcess cron `autooffice-auto-evolve` every 3d 04:00 — QA-gated minor/patch npm upgrades via Agent_core/scripts/auto-evolve.mjs; no human approval; rollback on health fail."
   },
   "contacts": {
-    "last_updated": "2026-05-01",
-    "updated_by": "solo-web-a4a78726"
+    "last_updated": "2026-07-16T23:59:00+08:00",
+    "updated_by": "codex-runtime-governance"
   }
 }

@@ -30,7 +30,7 @@ describe('coordination capability metadata', () => {
       ]),
     );
     expect(capability.entry_points.cli).toBe('node dist/cli.js');
-    expect(capability.entry_points.http_server).toBe('node dist/cli.js serve -p 3900');
+    expect(capability.entry_points.http_server).toBe('PolarProcess service autooffice');
     expect(capability.entry_points.project_dir).toContain('AutoOffice');
   });
 });

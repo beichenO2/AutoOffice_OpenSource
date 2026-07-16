@@ -18,8 +18,13 @@ npm ci
 
 ```bash
 cd ~/Polarisor/AutoOffice
-node dist/cli.js serve --port 3900
+npm run build
+bash scripts/register-runtime.sh finalize
+curl -fsS -X POST http://127.0.0.1:11055/api/services/autooffice/start
 ```
+
+PolarProcess 是唯一生命周期权威，PolarPort 是唯一端口权威。部署脚本不得直接
+启动、后台化或发送信号，也不得修改两个 AutoOffice cron。
 
 ## 端口分配
 
@@ -33,12 +38,14 @@ node dist/cli.js serve --port 3900
 curl -s http://127.0.0.1:3900/health
 ```
 
-## 回滚方式
+## 回滚后重建与精确重启
 
 ```bash
 cd ~/Polarisor/AutoOffice
 git log --oneline -5
-git checkout <previous-commit>
 npm ci
-node dist/cli.js serve --port 3900
+npm run build
+curl -fsS -X POST http://127.0.0.1:11055/api/services/autooffice/restart
 ```
+
+代码版本回滚须通过正常 Git 审核流程完成；本 Skill 只负责回滚后的权威重启。

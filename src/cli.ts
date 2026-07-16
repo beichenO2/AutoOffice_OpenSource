@@ -9,6 +9,7 @@ import { summarize } from './summarize/pipeline.js';
 import { normalizeRawInput } from './summarize/parser.js';
 import { resolveCliWikiOutputDir } from './wiki-output.js';
 import { AUTOOFFICE_NAME, AUTOOFFICE_VERSION, SUPPORTED_GENERATE_FORMATS } from './index.js';
+import { resolveServePort } from './runtime-governance.js';
 import { emitLobsterEvent } from './lobster/emitter.js';
 import type { ReportFormat } from './format/types.js';
 import type { RawInput } from './summarize/types.js';
@@ -617,18 +618,25 @@ program
   .option('-p, --port <port>', 'Port number (overridden by PORT env when set)', '3900')
   .action(async (opts) => {
     const { startServer } = await import('./server.js');
-    const fromEnv = process.env.PORT ? Number.parseInt(process.env.PORT, 10) : Number.NaN;
-    const preferred = Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : parseInt(opts.port, 10);
+    const resolution = resolveServePort(process.env, Number.parseInt(opts.port, 10));
 
-    // Tests / ad-hoc runs bind the exact port without PolarPort involvement.
-    if (process.env.AUTOOFFICE_DIRECT_PORT === '1') {
-      startServer(preferred);
+    // Terminating integration tests bind an ephemeral port without registry state.
+    if (resolution.direct) {
+      startServer(resolution.port);
       return;
     }
 
     const sdkPath = resolve(dirname(new URL(import.meta.url).pathname), '..', '..', 'PolarPort', 'dist', 'sdk', 'index.js');
     const { claimPort } = await import(sdkPath);
-    const port = await claimPort({ service: 'autooffice', project: 'AutoOffice', preferred, heartbeat: true });
+    const port = await claimPort({
+      service: 'autooffice',
+      project: 'AutoOffice',
+      preferred: resolution.port,
+      heartbeat: true,
+    });
+    if (port !== resolution.port) {
+      throw new Error(`PolarPort returned ${port}, but AutoOffice requires ${resolution.port}`);
+    }
 
     startServer(port);
   });

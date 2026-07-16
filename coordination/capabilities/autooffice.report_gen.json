@@ -20,7 +20,7 @@
   ],
   "entry_points": {
     "cli": "node dist/cli.js",
-    "http_server": "node dist/cli.js serve -p 3900",
+    "http_server": "PolarProcess service autooffice",
     "project_dir": "~/Polarisor/AutoOffice/"
   },
   "test_status": "249/252 passing (34 files)"

@@ -7,7 +7,7 @@ AI-grade report generation without AI flavor. Part of the [Polarisor](https://gi
 git clone https://github.com/beichenO2/Polarisor.git && cd Polarisor && ./install.sh auto-office
 
 # Or standalone
-git clone https://github.com/beichenO2/AutoOffice.git && cd AutoOffice && npm install
+git clone https://github.com/beichenO2/AutoOffice.git && cd AutoOffice && npm ci
 ```
 
 ## Features
@@ -40,9 +40,13 @@ node dist/cli.js batch -i data.json -f pdf,docx,html -d output/
 # Inspect external office automation tools
 node dist/cli.js tools
 
-# Start API server
-node dist/cli.js serve -p 3900
+# Start the persistent API through PolarProcess
+bash scripts/register-runtime.sh finalize
+curl -fsS -X POST http://127.0.0.1:11055/api/services/autooffice/start
 ```
+
+PolarProcess is the only API lifecycle authority and PolarPort is the only port
+authority. Do not run `serve` directly, background it, or manage it with PID files.
 
 ## CLI Commands
 
@@ -73,8 +77,8 @@ node dist/cli.js serve -p 3900
 ## Testing
 
 ```bash
-npm test          # 125 tests, 21 files
-npm run test:watch  # Watch mode
+npm run build
+npm test          # 394 tests, 50 files
 ```
 
 ## Architecture

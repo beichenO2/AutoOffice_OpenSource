@@ -5,8 +5,11 @@
 ## 健康检查
 
 ```bash
-# 进程存活
-pgrep -f "AutoOffice" || echo "NOT RUNNING"
+# PolarProcess 权威状态
+curl -fsS http://127.0.0.1:11055/api/services/autooffice | jq '{status,pid,port,command}'
+
+# PolarPort 权威归属
+curl -fsS http://127.0.0.1:11050/api/list | jq '.[] | select(.service_name == "autooffice")'
 
 # HTTP 端点
 curl -s http://127.0.0.1:3900/health
@@ -41,6 +44,11 @@ curl -s http://127.0.0.1:3900/health
 
 ```bash
 cd ~/Polarisor/AutoOffice
-node dist/cli.js serve --port 3900
+npm run build
+curl -fsS -X POST http://127.0.0.1:11055/api/services/autooffice/restart
 curl -s http://127.0.0.1:3900/health && echo 'OK' || echo 'BROKEN'
 ```
+
+PolarProcess 与 PolarPort 是唯一权威；不得直接启动、后台化、使用 PID 文件或
+向监听进程发送信号。不要在 API 排障中触发 `autooffice-auto-evolve` 或
+`autooffice-sota-radar`。
