@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="auto">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="light dark" />
+  <title>AutoOffice · AI 文档创作工作台</title>
+  <link rel="stylesheet" href="./css/tokens.css" />
+  <link rel="stylesheet" href="./css/app.css" />
+</head>
+<body>
+  <!-- ============ inline icon sprite (no external assets) ============ -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <defs>
+      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></symbol>
+      <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+      <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+      <symbol id="i-sidebar-left" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></symbol>
+      <symbol id="i-sidebar-right" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></symbol>
+      <symbol id="i-theme" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4v16" fill="currentColor" stroke="none" opacity=".9"/></symbol>
+      <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></symbol>
+      <symbol id="i-file-pdf" viewBox="0 0 24 24"><path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Z"/><path d="M14 2v6h6"/></symbol>
+      <symbol id="i-file-ppt" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="12" rx="2"/><path d="M12 17v3m-4 0h8"/></symbol>
+      <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 4v4h4"/><path d="M12 8v4l3 2"/></symbol>
+      <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 7 4 12l5 5"/><path d="M4 12h11a5 5 0 0 1 0 10h-1"/></symbol>
+      <symbol id="i-redo" viewBox="0 0 24 24"><path d="m15 7 5 5-5 5"/><path d="M20 12H9a5 5 0 0 0 0 10h1"/></symbol>
+      <symbol id="i-zoom-in" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M11 8v6M8 11h6M20 20l-3.2-3.2"/></symbol>
+      <symbol id="i-zoom-out" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M8 11h6M20 20l-3.2-3.2"/></symbol>
+      <symbol id="i-fit-width" viewBox="0 0 24 24"><path d="M3 12h18M7 8l-4 4 4 4M17 8l4 4-4 4"/></symbol>
+      <symbol id="i-fit-page" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/></symbol>
+      <symbol id="i-marquee" viewBox="0 0 24 24"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/></symbol>
+      <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 21h16"/></symbol>
+      <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 5v14l11-7z" fill="currentColor" stroke="none"/></symbol>
+      <symbol id="i-send" viewBox="0 0 24 24"><path d="M4 12 20 4l-6 16-3-7-7-1Z"/></symbol>
+      <symbol id="i-retry" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 3v5h-5"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 13 4 4L19 7"/></symbol>
+      <symbol id="i-wand" viewBox="0 0 24 24"><path d="m5 19 10-10M14 6l1.5-1.5M18 10l1.5-1.5M9 3l.7 2 2 .7-2 .7L9 8.4l-.7-2-2-.7 2-.7L9 3Z"/></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+      <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 20h20L12 3Z"/><path d="M12 10v4M12 17h.01"/></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+      <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 13 9 5 9-5"/></symbol>
+      <symbol id="i-doc" viewBox="0 0 24 24"><path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Z"/></symbol>
+      <symbol id="i-cancel" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></symbol>
+    </defs>
+  </svg>
+
+  <div class="ao-app" id="ao-app" data-mode="pdf">
+
+    <!-- ============ TOPBAR ============ -->
+    <header class="ao-topbar ao-glass--strong">
+      <button class="ao-icon-btn" id="pane-left-toggle" data-testid="pane-left-toggle"
+              aria-label="折叠/展开左侧栏" aria-pressed="false" title="左侧栏">
+        <svg class="ao-icon"><use href="#i-sidebar-left"/></svg>
+      </button>
+      <div class="ao-brand">
+        <span class="ao-brand__mark"><svg class="ao-icon ao-icon--sm"><use href="#i-wand"/></svg></span>
+        <span class="ao-brand__name">AutoOffice</span>
+        <span class="ao-brand__tag">AI 文档创作工作台</span>
+      </div>
+
+      <div class="ao-topbar__spacer"></div>
+
+      <div class="ao-topbar__group">
+        <button class="ao-icon-btn" id="transparency-toggle" data-testid="transparency-toggle"
+                aria-label="减少透明度" aria-pressed="false" title="减少透明度（玻璃降级为实色）">
+          <svg class="ao-icon"><use href="#i-eye"/></svg>
+        </button>
+        <button class="ao-icon-btn" id="theme-toggle" data-testid="theme-toggle"
+                aria-label="切换主题：自动 / 亮 / 暗" title="主题：自动">
+          <svg class="ao-icon"><use href="#i-theme"/></svg>
+          <span class="ao-visually-hidden" id="theme-label">自动</span>
+        </button>
+        <button class="ao-icon-btn" id="pane-right-toggle" data-testid="pane-right-toggle"
+                aria-label="折叠/展开右侧栏" aria-pressed="false" title="右侧栏">
+          <svg class="ao-icon"><use href="#i-sidebar-right"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- ============ LEFT PANE ============ -->
+    <aside class="ao-pane ao-pane--left ao-glass" data-testid="pane-left" aria-label="项目与历史">
+      <!-- collapsed rail -->
+      <div class="ao-pane__rail">
+        <button class="ao-icon-btn" data-action="expand-left" aria-label="展开左侧栏" title="展开">
+          <svg class="ao-icon"><use href="#i-sidebar-left"/></svg>
+        </button>
+        <button class="ao-icon-btn" data-action="expand-left" aria-label="项目" title="项目">
+          <svg class="ao-icon"><use href="#i-doc"/></svg>
+        </button>
+        <button class="ao-icon-btn" data-action="expand-left" aria-label="历史" title="历史">
+          <svg class="ao-icon"><use href="#i-history"/></svg>
+        </button>
+        <span class="ao-rail__label">项目 · 历史</span>
+      </div>
+
+      <!-- full content -->
+      <div class="ao-pane__full">
+        <div class="ao-pane__header">
+          <span class="ao-pane__title">工作台</span>
+          <div class="ao-pane__spacer"></div>
+          <button class="ao-btn ao-btn--ghost" id="new-project" title="新建文档">
+            <svg class="ao-icon ao-icon--sm"><use href="#i-plus"/></svg>新建
+          </button>
+        </div>
+        <div class="ao-pane__body">
+          <div class="ao-group">
+            <label class="ao-field-label" for="project-switcher">当前项目</label>
+            <div class="ao-search">
+              <select class="ao-select" id="project-switcher" data-testid="project-switcher" aria-label="切换项目">
+                <option>加载中…</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="ao-group">
+            <div class="ao-search">
+              <svg class="ao-icon ao-icon--sm"><use href="#i-search"/></svg>
+              <input class="ao-input" id="task-search" type="search" placeholder="搜索任务 / 会话…" aria-label="搜索任务" />
+            </div>
+          </div>
+
+          <div class="ao-group">
+            <div class="ao-field-label">任务 / 会话</div>
+            <div class="ao-list" id="task-list" data-testid="task-list" role="list" aria-label="任务列表">
+              <!-- JS renders .ao-item[role=listitem] or empty-state here -->
+            </div>
+          </div>
+
+          <div class="ao-group">
+            <div class="ao-field-label">
+              <svg class="ao-icon ao-icon--sm" style="vertical-align:-2px;margin-right:4px"><use href="#i-history"/></svg>版本历史
+            </div>
+            <div class="ao-history" id="history-list" data-testid="history-list" role="list" aria-label="版本历史">
+              <!-- JS renders .ao-history__item -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <div class="ao-resizer ao-resizer--left" data-resizer="left" role="separator"
+         tabindex="0" aria-label="拖拽调整左侧栏宽度" aria-orientation="vertical"></div>
+
+    <!-- ============ CENTER PANE ============ -->
+    <main class="ao-center" data-testid="pane-center" aria-label="文档工作区">
+      <!-- toolbar -->
+      <div class="ao-doc-toolbar ao-glass--strong" data-testid="doc-toolbar">
+        <div class="ao-doc-title">
+          <span class="ao-doc-title__name" id="doc-name">未打开文档</span>
+          <span class="ao-doc-title__sub" id="doc-sub">选择或新建一个文档开始</span>
+        </div>
+        <div class="ao-doc-toolbar__sep"></div>
+        <span class="ao-pill" data-testid="page-indicator" id="page-indicator">— / —</span>
+
+        <div class="ao-zoom" role="group" aria-label="缩放">
+          <button class="ao-icon-btn" data-testid="zoom-out" id="zoom-out" aria-label="缩小" title="缩小">
+            <svg class="ao-icon ao-icon--sm"><use href="#i-zoom-out"/></svg>
+          </button>
+          <span class="ao-zoom__value" id="zoom-value">100%</span>
+          <button class="ao-icon-btn" data-testid="zoom-in" id="zoom-in" aria-label="放大" title="放大">
+            <svg class="ao-icon ao-icon--sm"><use href="#i-zoom-in"/></svg>
+          </button>
+          <button class="ao-icon-btn" data-testid="fit-width" id="fit-width" aria-label="适应宽度" title="适应宽度">
+            <svg class="ao-icon ao-icon--sm"><use href="#i-fit-width"/></svg>
+          </button>
+          <button class="ao-icon-btn" data-testid="fit-page" id="fit-page" aria-label="适应页面" title="适应页面">
+            <svg class="ao-icon ao-icon--sm"><use href="#i-fit-page"/></svg>
+          </button>
+        </div>
+
+        <div class="ao-doc-toolbar__sep"></div>
+        <button class="ao-icon-btn" data-testid="annotate-toggle" id="annotate-toggle"
+                aria-label="框选批注" aria-pressed="false" title="框选批注：圈出想修改的区域">
+          <svg class="ao-icon"><use href="#i-marquee"/></svg>
+        </button>
+
+        <div class="ao-topbar__spacer"></div>
+
+        <div class="ao-render-status is-rendered" data-testid="render-status" id="render-status" aria-live="polite">
+          <span class="ao-render-status__dot"></span><span id="render-status-text">已渲染</span>
+        </div>
+        <div class="ao-menu-wrap">
+          <button class="ao-btn" data-testid="export-menu" id="export-menu" aria-haspopup="menu" aria-expanded="false">
+            <svg class="ao-icon ao-icon--sm"><use href="#i-download"/></svg>导出
+            <svg class="ao-icon ao-icon--sm"><use href="#i-chevron-down"/></svg>
+          </button>
+          <div class="ao-menu ao-glass--strong" id="export-list" role="menu" aria-label="导出格式">
+            <button class="ao-menu__item" role="menuitem" data-export="html"><svg class="ao-icon ao-icon--sm"><use href="#i-doc"/></svg>导出 HTML</button>
+            <button class="ao-menu__item" role="menuitem" data-export="pdf"><svg class="ao-icon ao-icon--sm"><use href="#i-file-pdf"/></svg>导出 PDF</button>
+            <button class="ao-menu__item" role="menuitem" data-export="pptx"><svg class="ao-icon ao-icon--sm"><use href="#i-file-ppt"/></svg>导出 PPTX</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- STAGE: exactly one child visible at a time (JS toggles .ao-hidden) -->
+      <div class="ao-stage" id="ao-stage">
+
+        <!-- state: PDF -->
+        <div class="ao-stage__inner ao-hidden" id="center-pdf" data-testid="pdf-canvas-container">
+          <article class="ao-page" data-page="1">
+            <div class="ao-doc-body">
+              <h2>季度业务回顾</h2>
+              <p class="ao-lead">本页为渲染占位示意，真实位图由引擎侧注入。</p>
+              <p>第一段正文用于演示纸张的实体质感与可读排版：中央文档区始终不透明，玻璃材质只作用于导航与工具栏，正文对比度不做妥协。</p>
+              <p>第二段继续填充版式，展示行距、字号与留白在纸面上的呼吸感，确保长文阅读舒适。</p>
+            </div>
+            <span class="ao-page__num">1</span>
+            <!-- overlay for box-select — engine owner implements selection logic -->
+            <div class="ao-page-overlay" data-testid="page-overlay" data-page="1" aria-label="批注层"></div>
+          </article>
+
+          <article class="ao-page" data-page="2">
+            <div class="ao-page__placeholder">
+              <svg class="ao-icon" style="width:26px;height:26px"><use href="#i-doc"/></svg>
+              <span style="font-size:var(--ao-fs-sm)">第 2 页 · 等待渲染（空态占位，非真实内容）</span>
+            </div>
+            <span class="ao-page__num">2</span>
+            <div class="ao-page-overlay" data-page="2" aria-label="批注层"></div>
+          </article>
+
+          <!-- compare bar (before / after) — hidden until a change is applied -->
+          <section class="ao-compare ao-hidden" data-testid="compare-bar" id="compare-bar" aria-label="修改前后对比">
+            <div class="ao-compare__head">
+              <span class="ao-pane__title">修改前后对比</span>
+              <button class="ao-btn ao-btn--ghost" data-action="close-compare"><svg class="ao-icon ao-icon--sm"><use href="#i-x"/></svg>关闭</button>
+            </div>
+            <div class="ao-compare__body">
+              <div class="ao-compare__side"><span class="ao-compare__tag ao-pill">修改前</span></div>
+              <div class="ao-compare__side"><span class="ao-compare__tag ao-pill" style="color:var(--ao-accent)">修改后</span></div>
+            </div>
+          </section>
+        </div>
+
+        <!-- state: PPT deck -->
+        <div class="ao-deck ao-hidden" id="center-deck">
+          <div class="ao-thumbs" data-testid="slide-thumbs" id="slide-thumbs" role="listbox" aria-label="幻灯片缩略图"></div>
+          <div class="ao-slide-view">
+            <div class="ao-slide" data-testid="slide-stage" id="slide-stage">
+              <div class="ao-doc-body">
+                <h2>封面 · 标题幻灯片</h2>
+                <p class="ao-lead">16:9 舞台占位示意</p>
+              </div>
+              <div class="ao-page-overlay" data-page="1" aria-label="批注层"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- state: loading (skeleton + steps) -->
+        <div class="ao-loading ao-hidden" id="center-loading" data-testid="center-loading" aria-live="polite">
+          <div class="ao-skel ao-skel--page"></div>
+          <div class="ao-spinner" aria-hidden="true"></div>
+          <div class="ao-progress-steps" id="loading-steps">正在生成文档…</div>
+        </div>
+
+        <!-- state: empty (also the no-JS fallback) -->
+        <div class="ao-empty" id="center-empty" data-testid="center-empty">
+          <div class="ao-empty__art"><svg class="ao-icon" style="width:26px;height:26px"><use href="#i-wand"/></svg></div>
+          <div class="ao-empty__title">告诉我你想做什么样的文档</div>
+          <p class="ao-empty__text">用大白话描述需求，我来生成真实可编辑的 PDF 或幻灯片。你随时可以框选不满意的地方，让我定点修改。</p>
+          <div class="ao-chips">
+            <button class="ao-chip-suggest" data-example="做一份8页的季度业务回顾PDF">季度业务回顾（PDF）</button>
+            <button class="ao-chip-suggest" data-example="做一套12页的产品发布会幻灯片">产品发布会（PPT）</button>
+            <button class="ao-chip-suggest" data-example="做一份单页招聘海报">招聘海报（单页）</button>
+          </div>
+        </div>
+
+        <!-- state: render error -->
+        <div class="ao-stage__inner ao-hidden" id="center-error">
+          <div class="ao-error-panel ao-glass" data-testid="error-panel" role="alert">
+            <div class="ao-error-panel__head">
+              <svg class="ao-icon"><use href="#i-alert"/></svg><span>本次渲染失败</span>
+            </div>
+            <p class="ao-error-panel__note" id="error-msg">编译源文件时出错，已为你保留上一版可用文档，内容不会丢失。</p>
+            <div class="ao-error-panel__lastgood">
+              <svg class="ao-icon ao-icon--sm"><use href="#i-check"/></svg>
+              <span>上一版可用文档已保留，可继续查看或直接重试。</span>
+            </div>
+            <details class="ao-disclosure">
+              <summary><svg class="ao-icon ao-icon--sm"><use href="#i-chevron-right"/></svg>查看诊断信息</summary>
+              <pre id="error-diagnostics">render exited with code 1
+! Undefined control sequence.
+l.42 \aoNode{h-3}\badcmd</pre>
+            </details>
+            <button class="ao-btn ao-btn--primary" data-testid="retry-render" id="retry-render">
+              <svg class="ao-icon ao-icon--sm"><use href="#i-retry"/></svg>重试渲染
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </main>
+
+    <div class="ao-resizer ao-resizer--right" data-resizer="right" role="separator"
+         tabindex="0" aria-label="拖拽调整右侧栏宽度" aria-orientation="vertical"></div>
+
+    <!-- ============ RIGHT PANE ============ -->
+    <aside class="ao-pane ao-pane--right ao-glass" data-testid="pane-right" aria-label="对话与方案">
+      <!-- collapsed rail -->
+      <div class="ao-pane__rail">
+        <button class="ao-icon-btn" data-action="expand-right" aria-label="展开右侧栏" title="展开">
+          <svg class="ao-icon"><use href="#i-sidebar-right"/></svg>
+        </button>
+        <button class="ao-icon-btn" data-action="expand-right" aria-label="对话" title="对话">
+          <svg class="ao-icon"><use href="#i-wand"/></svg>
+        </button>
+        <span class="ao-rail__label">对话 · 方案</span>
+      </div>
+
+      <!-- full content -->
+      <div class="ao-pane__full">
+        <div class="ao-pane__header">
+          <span class="ao-pane__title">对话</span>
+          <div class="ao-pane__spacer"></div>
+          <span class="ao-pill" id="agent-state-pill">待命</span>
+        </div>
+
+        <div class="ao-pane__body" id="chat-stream" data-testid="chat-stream" role="log" aria-live="polite" aria-label="对话记录">
+          <!-- JS renders messages / proposal-card / change-summary / error-recovery, or empty-state -->
+        </div>
+
+        <div class="ao-pane__footer">
+          <div class="ao-composer">
+            <div class="ao-composer__row">
+              <textarea class="ao-textarea" id="chat-input" data-testid="chat-input" rows="1"
+                        placeholder="用一句话描述你想要的改动，例如：让标题更醒目一点" aria-label="需求输入"></textarea>
+              <button class="ao-send" id="chat-send" data-testid="chat-send" aria-label="发送" title="发送 (⌘/Ctrl + Enter)">
+                <svg class="ao-icon"><use href="#i-send"/></svg>
+              </button>
+            </div>
+            <div class="ao-composer__hint">
+              <span>大白话即可，我会先给方案再动手</span>
+              <span><span class="ao-kbd">⌘</span><span class="ao-kbd">↵</span> 发送</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <div class="ao-scrim" data-action="close-drawers" aria-hidden="true"></div>
+  </div>
+
+  <div class="ao-toasts" id="toasts" aria-live="assertive" aria-atomic="true"></div>
+
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>

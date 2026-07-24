@@ -28,6 +28,7 @@ import { getLobsterStatus, getLobsterHealth, runLobsterTest } from './lobster/ad
 import { detectBackend, ocrImage, ocrPdf } from './integrations/vlm-ocr.js';
 import { normalizeFormulas, detectMathCandidates } from './integrations/normalize-formulas.js';
 import type { RawInput } from './summarize/types.js';
+import { mountEngineRoutes } from './engine/routes.js';
 
 function emitServerError(endpoint: string, err: unknown): void {
   const message = err instanceof Error ? err.message : String(err);
@@ -70,6 +71,7 @@ export function startServer(port: number = 3900): void {
   setupAdapters();
   const app = express();
   app.use(express.json({ limit: '50mb' }));
+  mountEngineRoutes(app);
 
   app.get(['/health', '/api/health'], async (_req, res) => {
     const body: Record<string, unknown> = {
@@ -542,6 +544,8 @@ export function startServer(port: number = 3900): void {
     console.log(`  GET  /api/lobster/status  — Lobster project status`);
     console.log(`  GET  /api/lobster/health  — Lobster health check`);
     console.log(`  GET  /api/lobster/test    — Lobster run tests`);
+    console.log(`  GET  /api/engine/*       — Document IDE engine API`);
+    console.log(`  GET  /aoide/             — AI document IDE UI`);
     console.log(`  GET  /health          — Health check`);
   });
 }

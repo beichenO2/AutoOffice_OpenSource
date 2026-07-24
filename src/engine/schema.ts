@@ -242,5 +242,7 @@ export const annotationCreateSchema: Schema = {
     },
     instruction: { schema: { kind: 'string', minLength: 1 } },
     nearbyText: { schema: { kind: 'string' }, optional: true },
+    directNodeId: { schema: { kind: 'string', minLength: 1 }, optional: true },
+    domNodeId: { schema: { kind: 'string', minLength: 1 }, optional: true },
   },
 };

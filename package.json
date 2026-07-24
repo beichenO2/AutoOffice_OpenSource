@@ -13,6 +13,8 @@
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:visual-states": "vitest run tests/engine/visual-states.test.ts",
+    "test:visual-states:update": "AUTOOFFICE_VISUAL_UPDATE=1 vitest run tests/engine/visual-states.test.ts",
     "serve": "node dist/cli.js serve --port ${PORT:-3900}",
     "start": "node dist/cli.js"
   },
