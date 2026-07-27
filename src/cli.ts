@@ -622,7 +622,7 @@ program
 
     // Terminating integration tests bind an ephemeral port without registry state.
     if (resolution.direct) {
-      startServer(resolution.port);
+      await startServer(resolution.port);
       return;
     }
 
@@ -638,7 +638,7 @@ program
       throw new Error(`PolarPort returned ${port}, but AutoOffice requires ${resolution.port}`);
     }
 
-    startServer(port);
+    await startServer(port);
   });
 
 await program.parseAsync(process.argv).catch(async (err: unknown) => {

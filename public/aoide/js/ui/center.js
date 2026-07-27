@@ -49,7 +49,9 @@ export function initCenter(handlers = {}) {
 
   function applyZoom() {
     zoomValue.textContent = `${s.zoom}%`;
-    $$('#ao-stage .ao-stage__inner').forEach((n) => {
+    // Only the document stages scale. The error panel is also a
+    // `.ao-stage__inner`, and zooming an alert box was never intended.
+    $$('#center-pdf, #center-deck').forEach((n) => {
       n.style.transformOrigin = 'top center';
       n.style.transform = `scale(${s.zoom / 100})`;
     });

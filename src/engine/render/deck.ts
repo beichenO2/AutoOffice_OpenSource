@@ -8,17 +8,37 @@ import { tmpdir } from 'node:os';
 
 let sharedBrowser: Browser | null = null;
 
+/** Local file:// decks have no network; `networkidle` stalls or adds seconds of idle wait. */
+const FILE_HTML_WAIT = 'load' as const;
+
 async function getBrowser(): Promise<Browser> {
-  if (!sharedBrowser) {
+  if (!sharedBrowser || !sharedBrowser.isConnected()) {
     sharedBrowser = await chromium.launch({ headless: true });
   }
   return sharedBrowser;
 }
 
 export async function closeRenderBrowser(): Promise<void> {
-  if (sharedBrowser) {
+  if (sharedBrowser?.isConnected()) {
     await sharedBrowser.close();
-    sharedBrowser = null;
+  }
+  sharedBrowser = null;
+}
+
+/** Launch shared Chromium and run a tiny measure so first real deck render is warm. */
+export async function warmRenderBrowser(): Promise<void> {
+  const browser = await getBrowser();
+  const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+  try {
+    await page.setContent(
+      '<!DOCTYPE html><html><body><div class="ao-slide" style="width:1280px;height:720px"><span data-ao-id="warm" data-ao-type="text">warm</span></div></body></html>',
+      { waitUntil: 'domcontentloaded' },
+    );
+    await page.evaluate(() => {
+      document.querySelector('[data-ao-id]')?.getBoundingClientRect();
+    });
+  } finally {
+    await page.close();
   }
 }
 
@@ -29,7 +49,7 @@ export async function htmlToPdfBuffer(html: string): Promise<Buffer> {
   try {
     const browser = await getBrowser();
     const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
-    await page.goto(`file://${file}`, { waitUntil: 'networkidle' });
+    await page.goto(`file://${file}`, { waitUntil: FILE_HTML_WAIT });
     const pdf = await page.pdf({ printBackground: true, width: '1280px', height: '720px' });
     await page.close();
     return Buffer.from(pdf);
@@ -47,7 +67,7 @@ export async function measureDeckBoxes(html: string): Promise<
   try {
     const browser = await getBrowser();
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
-    await page.goto(`file://${file}`, { waitUntil: 'networkidle' });
+    await page.goto(`file://${file}`, { waitUntil: FILE_HTML_WAIT });
     const boxes = await page.evaluate(() => {
       const slides = Array.from(document.querySelectorAll('.ao-slide'));
       const out: Array<{ nodeId: string; page: number; x: number; y: number; w: number; h: number }> = [];
@@ -89,7 +109,7 @@ export async function exportDeckPptxImageFallback(html: string): Promise<Buffer>
   try {
     const browser = await getBrowser();
     const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
-    await page.goto(`file://${file}`, { waitUntil: 'networkidle' });
+    await page.goto(`file://${file}`, { waitUntil: FILE_HTML_WAIT });
     const slides = page.locator('.ao-slide');
     const count = await slides.count();
     for (let i = 0; i < count; i++) {

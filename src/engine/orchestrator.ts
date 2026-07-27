@@ -7,10 +7,15 @@ import type {
   Brief,
   EditIntent,
   Message,
+  NormRect,
   Project,
   Proposal,
+  ResolvedCandidate,
   Revision,
+  SemanticNode,
+  SourceBox,
   SourceFile,
+  SourceMap,
   TaskStep,
 } from './types.js';
 import type { Repo } from './repo.js';
@@ -31,6 +36,20 @@ import {
 } from './revisions.js';
 import { assertValid, editIntentSchema } from './schema.js';
 import { buildReplaceTextIntent } from './latex/patch.js';
+import { buildDeckBoxes, buildPdfBoxes, buildSlidevDeckBoxes, pageCountOf } from './boxmap.js';
+import { describeNode } from './labels.js';
+import { rankByRect, type ElementBox } from './html/hit-test.js';
+import { intersectionArea } from './coords.js';
+import { pptSourceOfTruth } from './config.js';
+import {
+  renderSlidevSource,
+  previewHtmlFromSource,
+  applySlidevEditIntent,
+  slidevBuild,
+  cleanupSlidevWorkDir,
+  SLIDES_MD,
+} from './slidev/index.js';
+import { parseSlidevDeck } from './slidev/parse.js';
 import {
   compileLatexSandbox,
   cleanupCompileDir,
@@ -163,12 +182,34 @@ export async function generateFromBrief(
   let source: SourceFile[];
   let renderMime: string;
   let renderBuffer: Buffer;
+  let boxes: SourceBox[] = [];
 
   if (project.kind === 'presentation') {
-    const html = renderDeckHtml(deckSpecFromBrief(brief, theme));
-    source = [{ path: 'deck.html', language: 'html', content: html }];
-    renderMime = 'text/html';
-    renderBuffer = Buffer.from(html, 'utf-8');
+    const spec = deckSpecFromBrief(brief, theme);
+    const useSlidev = pptSourceOfTruth() === 'slidev';
+    if (useSlidev) {
+      source = renderSlidevSource(spec);
+      let renderHtml = previewHtmlFromSource(source);
+      let workDir: string | undefined;
+      try {
+        const built = await slidevBuild(source);
+        workDir = built.workDir;
+        if (built.html) renderHtml = built.html;
+      } catch {
+        // Fall back to measured preview HTML when CLI build unavailable (CI/offline).
+      } finally {
+        if (workDir) await cleanupSlidevWorkDir(workDir);
+      }
+      renderMime = 'text/html';
+      renderBuffer = Buffer.from(renderHtml, 'utf-8');
+      boxes = await buildSlidevDeckBoxes(source);
+    } else {
+      const html = renderDeckHtml(spec);
+      source = [{ path: 'deck.html', language: 'html', content: html }];
+      renderMime = 'text/html';
+      renderBuffer = Buffer.from(html, 'utf-8');
+      boxes = await buildDeckBoxes(html);
+    }
   } else {
     const tex = renderLatexDocument(pdfSpecFromBrief(brief.scenario, brief.contentGoals));
     source = latexSourceFiles(tex);
@@ -193,6 +234,14 @@ export async function generateFromBrief(
     }
     renderMime = 'application/pdf';
     renderBuffer = compiled.pdf;
+    // SyncTeX forward lookup has to run while the `.synctex` file still sits
+    // next to the PDF. We persist the result with the revision, so resolving a
+    // box selection later never depends on build artefacts surviving.
+    boxes = buildPdfBoxes(tex, parseLatexNodes(tex), {
+      workDir: compiled.workDir,
+      texName: 'main.tex',
+      pdfName: 'main.pdf',
+    });
     await cleanupCompileDir(compiled.workDir);
   }
 
@@ -209,12 +258,8 @@ export async function generateFromBrief(
   const renderPath = await repo.store.writeRender(project.id, `${revision.id}.${project.kind === 'pdf' ? 'pdf' : 'html'}`, renderBuffer);
   revision.renderPath = renderPath;
 
-  if (project.kind === 'pdf') {
-    const tex = source[0]?.content ?? '';
-    const map = buildSourceMap(revision.id, tex, idFactory);
-    await repo.putSourceMap(map);
-    revision.sourceMapId = map.id;
-  }
+  const map = await persistSourceMap(deps, revision, project, source, boxes);
+  revision.sourceMapId = map.id;
 
   await runStandardsPreflight(deps, project, revision, brief);
 
@@ -237,12 +282,16 @@ export async function runAnnotationEdit(
   project: Project,
   annotation: Annotation,
   domNodeId?: string,
+  replacementText?: string,
+  opts?: { baseRevisionId?: string },
 ): Promise<{ project: Project; revision: Revision; task: AgentTask }> {
   const { repo, store, idFactory, clock } = deps;
-  const headId = project.headRevisionId;
-  if (!headId) throw new Error('No head revision');
-  const head = await repo.getRevision(headId);
-  if (!head) throw new Error('Head revision missing');
+  const headAtStart = project.headRevisionId;
+  const baseId = opts?.baseRevisionId ?? annotation.revisionId ?? headAtStart;
+  if (!baseId) throw new Error('No base revision');
+  const head = await repo.getRevision(baseId);
+  if (!head) throw new Error(`Base revision missing: ${baseId}`);
+  if (head.projectId !== project.id) throw new Error('Base revision project mismatch');
 
   const task: AgentTask = {
     id: idFactory('task'),
@@ -271,12 +320,18 @@ export async function runAnnotationEdit(
   }
   if (!nodeId) throw new Error('Could not resolve edit target');
 
-  const newText = extractReplacementText(annotation.instruction);
+  const rewrite = parseRewriteInstruction(annotation.instruction);
+  if (replacementText === undefined && !rewrite.literal) {
+    throw new AmbiguousInstructionError(
+      '指令没有说明要改成什么内容，需要用户补充或从候选方案中选择',
+    );
+  }
+  const newText = replacementText ?? rewrite.text;
   const intent = buildReplaceTextIntent(
     {
       id: idFactory('edit'),
       projectId: project.id,
-      baseRevisionId: headId,
+      baseRevisionId: baseId,
       kind: 'content',
       scope: 'local',
       targetNodeIds: [nodeId],
@@ -289,15 +344,31 @@ export async function runAnnotationEdit(
   );
   assertValid(intent, editIntentSchema, 'EditIntent');
 
-  assertBaseCurrent(project, headId);
+  // Concurrent head change while applying → reject. Editing a non-head revision
+  // is allowed (produces an explicit new revision from that base), but a race
+  // that moves head between request start and commit is not.
+  const fresh = await repo.getProject(project.id);
+  if (!fresh) throw new Error('Project disappeared during edit');
+  if (fresh.headRevisionId !== headAtStart) {
+    assertBaseCurrent(fresh, headAtStart ?? baseId);
+  }
   let nextSource: SourceFile[];
   if (project.kind === 'presentation') {
-    const html = head.source.find((f) => f.path === 'deck.html')?.content ?? '';
-    const result = applyEditIntent(html, intent);
-    if (!result.collateral.ok) {
-      throw new Error(`Collateral change: ${result.collateral.unexpectedChanged.join(',')}`);
+    const slidevMd = head.source.find((f) => f.path === SLIDES_MD);
+    if (slidevMd) {
+      const result = applySlidevEditIntent(head.source, intent);
+      if (!result.collateral.ok) {
+        throw new Error(`Collateral change: ${result.collateral.unexpectedChanged.join(',')}`);
+      }
+      nextSource = result.source;
+    } else {
+      const html = head.source.find((f) => f.path === 'deck.html')?.content ?? '';
+      const result = applyEditIntent(html, intent);
+      if (!result.collateral.ok) {
+        throw new Error(`Collateral change: ${result.collateral.unexpectedChanged.join(',')}`);
+      }
+      nextSource = [{ path: 'deck.html', language: 'html', content: result.html }];
     }
-    nextSource = [{ path: 'deck.html', language: 'html', content: result.html }];
   } else {
     nextSource = applySourcePatch(head.source, intent);
   }
@@ -311,10 +382,60 @@ export async function runAnnotationEdit(
 
   let renderBuffer: Buffer;
   let renderMime: string;
+  let boxes: SourceBox[] = [];
   if (project.kind === 'presentation') {
-    const html = nextSource[0]!.content;
-    renderMime = 'text/html';
-    renderBuffer = Buffer.from(html, 'utf-8');
+    const slidevMd = nextSource.find((f) => f.path === SLIDES_MD);
+    if (slidevMd) {
+      let renderHtml = previewHtmlFromSource(nextSource);
+      let workDir: string | undefined;
+      try {
+        const built = await slidevBuild(nextSource);
+        workDir = built.workDir;
+        if (built.html) renderHtml = built.html;
+      } catch {
+        // preview HTML is sufficient for edit re-render when build fails
+      } finally {
+        if (workDir) await cleanupSlidevWorkDir(workDir);
+      }
+      renderMime = 'text/html';
+      renderBuffer = Buffer.from(renderHtml, 'utf-8');
+      try {
+        boxes = await buildSlidevDeckBoxes(nextSource);
+      } catch {
+        boxes = candidates
+          .filter((c) => c.nodeId && c.rect)
+          .map((c) => ({
+            nodeId: c.nodeId,
+            page: annotation.page,
+            x: c.rect!.x,
+            y: c.rect!.y,
+            w: c.rect!.w,
+            h: c.rect!.h,
+            type: c.type,
+            label: c.label,
+          }));
+      }
+    } else {
+      const html = nextSource[0]!.content;
+      renderMime = 'text/html';
+      renderBuffer = Buffer.from(html, 'utf-8');
+      try {
+        boxes = await buildDeckBoxes(html);
+      } catch {
+        boxes = candidates
+          .filter((c) => c.nodeId && c.rect)
+          .map((c) => ({
+            nodeId: c.nodeId,
+            page: annotation.page,
+            x: c.rect!.x,
+            y: c.rect!.y,
+            w: c.rect!.w,
+            h: c.rect!.h,
+            type: c.type,
+            label: c.label,
+          }));
+      }
+    }
   } else {
     const tex = nextSource[0]!.content;
     if (containsPathEscape(tex)) throw new Error('Path escape blocked');
@@ -338,6 +459,11 @@ export async function runAnnotationEdit(
     }
     renderMime = 'application/pdf';
     renderBuffer = compiled.pdf;
+    boxes = buildPdfBoxes(tex, parseLatexNodes(tex), {
+      workDir: compiled.workDir,
+      texName: 'main.tex',
+      pdfName: 'main.pdf',
+    });
     await cleanupCompileDir(compiled.workDir);
   }
 
@@ -355,6 +481,7 @@ export async function runAnnotationEdit(
   });
   const ext = project.kind === 'pdf' ? 'pdf' : 'html';
   revision.renderPath = await repo.store.writeRender(project.id, `${revision.id}.${ext}`, renderBuffer);
+  revision.sourceMapId = (await persistSourceMap(deps, revision, project, nextSource, boxes)).id;
 
   const committed = await commitRendered(repo, project, revision, clock);
   annotation.status = 'resolved';
@@ -369,34 +496,140 @@ export async function runAnnotationEdit(
   return { project: committed.project, revision: committed.revision, task };
 }
 
-export function resolveAnnotationCandidates(
-  project: Project,
-  head: Revision,
-  page: number,
-  rectNorm: Annotation['rectNorm'],
-  domNodeId?: string,
-  pdfPath?: string,
-): Annotation['candidates'] {
-  if (domNodeId) {
-    const parsed = parseDeck(head.source.find((f) => f.path === 'deck.html')?.content ?? '');
-    const node = parsed.nodes.find((n) => n.id === domNodeId);
-    if (node) {
-      return [{ nodeId: node.id, type: node.type, range: node.range, score: 0.95, reason: 'direct DOM hit' }];
-    }
+/** Semantic nodes of a revision's source-of-truth, keyed by stable id. */
+export function indexNodes(project: Project, source: SourceFile[]): Map<string, SemanticNode> {
+  if (project.kind === 'presentation') {
+    const md = source.find((f) => f.path === SLIDES_MD)?.content;
+    if (md) return new Map(parseSlidevDeck(md).nodes.map((n) => [n.id, n]));
+    return new Map(
+      parseDeck(source.find((f) => f.path === 'deck.html')?.content ?? '').nodes.map((n) => [n.id, n]),
+    );
   }
-  if (project.kind === 'pdf' && pdfPath) {
-    const tex = head.source[0]?.content ?? '';
-    const nodes = parseLatexNodes(tex);
-    return resolvePdfTargets(rectNorm, page, pdfPath, tex, nodes);
-  }
-  return [];
+  return new Map(parseLatexNodes(source[0]?.content ?? '').map((n) => [n.id, n]));
 }
 
-function extractReplacementText(instruction: string): string {
-  const m =
-    /(?:改成|改为|换成|修改为|change to|replace with)\s*[「"']?(.+?)[」"']?\s*$/i.exec(instruction) ??
-    /(.+)/.exec(instruction);
-  return (m?.[1] ?? instruction).trim();
+export interface ResolveInput {
+  project: Project;
+  head: Revision;
+  page: number;
+  rectNorm: NormRect;
+  /** Persisted box map for `head`. Empty means geometry is unavailable. */
+  boxes: SourceBox[];
+  /** Set when the client already knows exactly which element was clicked. */
+  domNodeId?: string;
+}
+
+/**
+ * Resolve a framed selection to ranked source candidates.
+ *
+ * One geometric path for both media. The render→source box map is built at
+ * generation time (browser layout for HTML, SyncTeX forward lookup for PDF),
+ * so this function is pure, synchronous and unit-testable: it never shells
+ * out, never reads the rendered artefact, and never asks a model to guess from
+ * a screenshot.
+ */
+export function resolveAnnotationCandidates(input: ResolveInput): ResolvedCandidate[] {
+  const { project, head, page, rectNorm, boxes, domNodeId } = input;
+  const kind = project.kind === 'presentation' ? 'presentation' : 'pdf';
+  const index = indexNodes(project, head.source);
+  const boxOf = (nodeId: string): SourceBox | undefined =>
+    boxes.find((b) => b.nodeId === nodeId && b.page === page);
+  const rectOf = (box: SourceBox | undefined): { rect: NormRect } | Record<string, never> =>
+    box ? { rect: { x: box.x, y: box.y, w: box.w, h: box.h } } : {};
+
+  const elements: ElementBox[] = boxes
+    .filter((b) => b.page === page)
+    .map((b) => ({
+      nodeId: b.nodeId,
+      type: b.type ?? index.get(b.nodeId)?.type ?? 'element',
+      page: b.page,
+      rect: { x: b.x, y: b.y, w: b.w, h: b.h },
+    }));
+
+  const geometric = (): ResolvedCandidate[] =>
+    rankByRect(rectNorm, elements, page).map((candidate) => {
+      const node = index.get(candidate.nodeId);
+      const box = boxOf(candidate.nodeId);
+      return {
+        ...candidate,
+        range: node?.range ?? candidate.range,
+        label: box?.label ?? (node ? describeNode({ ...node, page }, { kind }) : candidate.nodeId),
+        ...rectOf(box),
+      };
+    });
+
+  // directNodeId is an untrusted client hint. Accept only when the node belongs
+  // to this revision, lives on the requested page, and its SourceBox intersects
+  // the framed rect. Otherwise ignore and re-rank server-side.
+  if (domNodeId) {
+    const node = index.get(domNodeId);
+    const box = boxOf(domNodeId);
+    const boxRect = box ? { x: box.x, y: box.y, w: box.w, h: box.h } : null;
+    const hits =
+      !!node &&
+      !!boxRect &&
+      intersectionArea(boxRect, rectNorm) > 0;
+    if (hits && node && boxRect) {
+      return [
+        {
+          nodeId: node.id,
+          type: node.type,
+          range: node.range,
+          score: 0.95,
+          reason: 'direct DOM hit (server-verified)',
+          label: box?.label ?? describeNode({ ...node, page }, { kind }),
+          ...rectOf(box),
+        },
+      ];
+    }
+  }
+
+  return geometric();
+}
+
+/** Raised when an instruction frames a target but never says what to change it to. */
+export class AmbiguousInstructionError extends Error {
+  readonly code = 'ambiguous_instruction';
+  constructor(message: string) {
+    super(message);
+    this.name = 'AmbiguousInstructionError';
+  }
+}
+
+const REWRITE_RE =
+  /(?:改成|改为|换成|修改为|替换为|写成|change to|replace with|rewrite as)\s*[「『"'“”]?(.+?)[」』"'“”]?\s*[。.]?\s*$/i;
+
+/**
+ * Decide whether an instruction literally states its replacement text.
+ *
+ * The previous behaviour fell back to "use the whole instruction as the new
+ * text", which turned 「这里字太小了」into a document that literally reads
+ * 「这里字太小了」. Anything without an explicit rewrite verb is now reported
+ * as non-literal, so the caller asks instead of guessing.
+ */
+export function parseRewriteInstruction(instruction: string): { text: string; literal: boolean } {
+  const captured = REWRITE_RE.exec(instruction.trim())?.[1]?.trim();
+  if (captured) return { text: captured, literal: true };
+  return { text: instruction.trim(), literal: false };
+}
+
+/** Persist the node list + box map that a revision's render resolves through. */
+async function persistSourceMap(
+  deps: OrchestratorDeps,
+  revision: Revision,
+  project: Project,
+  source: SourceFile[],
+  boxes: SourceBox[],
+): Promise<SourceMap> {
+  const nodes = [...indexNodes(project, source).values()];
+  const map: SourceMap = {
+    id: deps.idFactory('map'),
+    revisionId: revision.id,
+    nodes,
+    boxes,
+  };
+  await deps.repo.putSourceMap(map);
+  return map;
 }
 
 async function pushStep(

@@ -57,6 +57,11 @@ async function rotateIfNeeded(filePath: string): Promise<void> {
 }
 
 async function tryHttpPost(event: LobsterEvent): Promise<boolean> {
+  // Terminating tests must not block on SOTAgent (:4800) — each emit otherwise
+  // burns up to 3s and flakes under Vitest's 5s default.
+  if (process.env.NODE_ENV === 'test' && process.env.AUTOOFFICE_LOBSTER_HTTP !== '1') {
+    return false;
+  }
   const sotPort = process.env.SOTAGENT_PORT ?? '4800';
   const url = `http://127.0.0.1:${sotPort}/api/lobster/events`;
   try {

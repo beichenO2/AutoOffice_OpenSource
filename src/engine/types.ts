@@ -10,7 +10,7 @@
 export type DocumentKind = 'pdf' | 'presentation';
 
 /** Source language of a project's editable source-of-truth. */
-export type SourceLanguage = 'latex' | 'html' | 'css';
+export type SourceLanguage = 'latex' | 'html' | 'css' | 'markdown';
 
 /** Semantic node types that a selection can resolve to. */
 export type SemanticNodeType =
@@ -78,6 +78,10 @@ export interface SourceBox {
   y: number;
   w: number;
   h: number;
+  /** Node type, so a client can hit-test and label without a second lookup. */
+  type?: SemanticNodeType;
+  /** Human-readable Chinese label, e.g. `第 2 页 · 正文段落「…」`. */
+  label?: string;
 }
 
 export type RenderStatus = 'pending' | 'rendered' | 'failed';
@@ -131,6 +135,10 @@ export interface ResolvedCandidate {
   range: SourceRange;
   score: number;
   reason: string;
+  /** What the user is told they framed, e.g. `第 2 页 · 表格`. */
+  label?: string;
+  /** The box that produced this candidate, for UI highlighting. */
+  rect?: NormRect;
 }
 
 /** A user framing + natural-language instruction over a rendered artifact. */

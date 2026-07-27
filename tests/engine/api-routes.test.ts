@@ -45,8 +45,12 @@ describe('engine — HTTP /api/engine routes', () => {
       stdio: 'pipe',
       env: {
         ...process.env,
+        NODE_ENV: 'test',
         AUTOOFFICE_DIRECT_PORT: '1',
         AUTOOFFICE_ENGINE_HOME: engineHome,
+        AUTOOFFICE_ENGINE_INTERPRETER: 'deterministic',
+        // HTTP contract: skip cold Chromium; real measure covered by boxmap/visual/e2e.
+        AUTOOFFICE_BOXMAP: 'estimate',
       },
     });
     await new Promise<void>((resolve) => {
@@ -60,7 +64,8 @@ describe('engine — HTTP /api/engine routes', () => {
   }, 15000);
 
   afterAll(async () => {
-    serverProcess?.kill();
+    serverProcess?.kill('SIGTERM');
+    await new Promise((r) => setTimeout(r, 200));
     if (engineHome) await rm(engineHome, { recursive: true, force: true });
   });
 

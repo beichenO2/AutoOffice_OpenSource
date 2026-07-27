@@ -67,7 +67,7 @@ const MIME_MAP: Record<string, string> = {
 const HEALTH_DEPENDENCY_PROBE_MS = 8000;
 
 /** HTTP API — bind port from CLI (`serve -p`) or `PORT` env (see cli `serve` command). */
-export function startServer(port: number = 3900): void {
+export async function startServer(port: number = 3900): Promise<void> {
   setupAdapters();
   const app = express();
   app.use(express.json({ limit: '50mb' }));
@@ -516,36 +516,50 @@ export function startServer(port: number = 3900): void {
       process.exit(1);
     }
     shutdownStarted = true;
-    server.close((err) => {
-      if (err) {
-        console.error('Error during server shutdown:', err);
-        process.exit(1);
-      }
-      process.exit(0);
-    });
+    void import('./engine/render/deck.js')
+      .then(({ closeRenderBrowser }) => closeRenderBrowser())
+      .catch(() => {})
+      .finally(() => {
+        server.close((err) => {
+          if (err) {
+            console.error('Error during server shutdown:', err);
+            process.exit(1);
+          }
+          process.exit(0);
+        });
+      });
   };
 
   process.on('SIGINT', onShutdownSignal);
   process.on('SIGTERM', onShutdownSignal);
 
-  server.listen(port, '127.0.0.1', () => {
-    console.log(`AutoOffice API server running on http://127.0.0.1:${port}`);
-    console.log(`  POST /api/generate    — Generate reports`);
-    console.log(`  POST /api/summarize   — Summarize & route content`);
-    console.log(`  POST /api/ocr         — VLM OCR (PDF/image → LaTeX)`);
-    console.log(`  POST /api/normalize-formulas — Fix bare math in text`);
-    console.log(`  GET  /api/ocr/backends — Check VLM backend status`);
-    console.log(`  GET  /api/tools       — Detect external office tools`);
-    console.log(`  GET  /api/formats     — List supported formats`);
-    console.log(`  GET  /api/templates   — List template gallery`);
-    console.log(`  GET  /api/templates/:id — Get template source`);
-    console.log(`  POST /api/generate/ai — AI presentation (Presenton)`);
-    console.log(`  POST /api/visual-qa   — VLM visual quality check`);
-    console.log(`  GET  /api/lobster/status  — Lobster project status`);
-    console.log(`  GET  /api/lobster/health  — Lobster health check`);
-    console.log(`  GET  /api/lobster/test    — Lobster run tests`);
-    console.log(`  GET  /api/engine/*       — Document IDE engine API`);
-    console.log(`  GET  /aoide/             — AI document IDE UI`);
-    console.log(`  GET  /health          — Health check`);
+  const { warmRenderBrowser } = await import('./engine/render/deck.js');
+  await warmRenderBrowser().catch(() => {});
+
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(port, '127.0.0.1', () => {
+      server.off('error', reject);
+      resolve();
+    });
   });
+
+  console.log(`AutoOffice API server running on http://127.0.0.1:${port}`);
+  console.log(`  POST /api/generate    — Generate reports`);
+  console.log(`  POST /api/summarize   — Summarize & route content`);
+  console.log(`  POST /api/ocr         — VLM OCR (PDF/image → LaTeX)`);
+  console.log(`  POST /api/normalize-formulas — Fix bare math in text`);
+  console.log(`  GET  /api/ocr/backends — Check VLM backend status`);
+  console.log(`  GET  /api/tools       — Detect external office tools`);
+  console.log(`  GET  /api/formats     — List supported formats`);
+  console.log(`  GET  /api/templates   — List template gallery`);
+  console.log(`  GET  /api/templates/:id — Get template source`);
+  console.log(`  POST /api/generate/ai — AI presentation (Presenton)`);
+  console.log(`  POST /api/visual-qa   — VLM visual quality check`);
+  console.log(`  GET  /api/lobster/status  — Lobster project status`);
+  console.log(`  GET  /api/lobster/health  — Lobster health check`);
+  console.log(`  GET  /api/lobster/test    — Lobster run tests`);
+  console.log(`  GET  /api/engine/*       — Document IDE engine API`);
+  console.log(`  GET  /aoide/             — AI document IDE UI`);
+  console.log(`  GET  /health          — Health check`);
 }

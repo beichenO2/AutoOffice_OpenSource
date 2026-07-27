@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>AOIDE render surface test harness</title>
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+  <div id="center-pdf"></div>
+  <div id="slide-view"></div>
+  <div class="ao-render" id="ao-render" data-kind="pdf">
+    <div class="ao-render__surface" id="ao-render-surface" data-testid="render-surface">
+      <div class="ao-page-overlay" id="ao-overlay"></div>
+    </div>
+    <p class="ao-render__note" id="ao-render-note">尚未加载渲染结果</p>
+  </div>
+  <div id="test-status" data-testid="test-status"></div>
+  <script type="module">
+    import { initRender } from './js/ui/render.js';
+    const render = initRender();
+    const statusLog = [];
+    render.onStatusChange((st, detail) => {
+      statusLog.push({ st, revisionId: detail.revisionId, reason: detail.reason });
+      document.getElementById('test-status').dataset.status = st;
+      document.getElementById('test-status').dataset.log = JSON.stringify(statusLog);
+    });
+    window.__aoRenderTest = { render, statusLog };
+  </script>
+</body>
+</html>

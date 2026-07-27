@@ -116,12 +116,15 @@ function walk(value: unknown, schema: Schema, path: string, errors: string[]): v
       }
       const obj = value as Record<string, unknown>;
       for (const [key, spec] of Object.entries(schema.fields)) {
-        const present = Object.prototype.hasOwnProperty.call(obj, key) && obj[key] !== undefined;
-        if (!present) {
+        const hasKey = Object.prototype.hasOwnProperty.call(obj, key);
+        const val = obj[key];
+        if (!hasKey || val === undefined) {
           if (!spec.optional) errors.push(`${path}.${key}: required`);
           continue;
         }
-        walk(obj[key], spec.schema, `${path}.${key}`, errors);
+        // Optional fields: JSON null means absent (e.g. LLM `"proposal": null`).
+        if (spec.optional && val === null) continue;
+        walk(val, spec.schema, `${path}.${key}`, errors);
       }
       if (schema.additional === false) {
         for (const key of Object.keys(obj)) {
@@ -244,5 +247,8 @@ export const annotationCreateSchema: Schema = {
     nearbyText: { schema: { kind: 'string' }, optional: true },
     directNodeId: { schema: { kind: 'string', minLength: 1 }, optional: true },
     domNodeId: { schema: { kind: 'string', minLength: 1 }, optional: true },
+    /** Framed artefact revision; server must edit this version, not silently head. */
+    revisionId: { schema: { kind: 'string', minLength: 1 }, optional: true },
+    baseRevisionId: { schema: { kind: 'string', minLength: 1 }, optional: true },
   },
 };

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>AOIDE annotate test harness</title>
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body class="ao-app">
+  <div id="center-pdf"></div>
+  <div id="slide-view"></div>
+  <div class="ao-render" id="ao-render" data-kind="pdf">
+    <div class="ao-render__surface" id="ao-render-surface" data-testid="render-surface">
+      <div class="ao-page-overlay" id="ao-overlay"></div>
+    </div>
+    <p class="ao-render__note" id="ao-render-note">尚未加载渲染结果</p>
+  </div>
+  <form class="ao-annotate ao-glass ao-hidden" id="ao-annotate-form" data-testid="annotate-form">
+    <p class="ao-annotate__target">框选目标：<strong id="ao-annotate-target">—</strong></p>
+    <input class="ao-annotate__input" id="ao-annotate-input" autocomplete="off" placeholder="说明要改成什么…" />
+    <div class="ao-annotate__actions">
+      <button type="submit" class="ao-btn ao-btn--primary">应用修改</button>
+      <button type="button" class="ao-btn ao-btn--ghost" id="ao-annotate-cancel">取消</button>
+    </div>
+  </form>
+  <div id="test-status" data-testid="test-status"></div>
+  <script type="module">
+    import { initRender } from './js/ui/render.js';
+    import { initAnnotate } from './js/ui/annotate.js';
+
+    const statusEl = document.getElementById('test-status');
+    const render = initRender();
+    let session = { projectId: '', revisionId: '' };
+    let lastSubmit = null;
+
+    render.onStatusChange((st, detail) => {
+      statusEl.dataset.renderStatus = st;
+      statusEl.dataset.revisionId = detail.revisionId || session.revisionId || '';
+    });
+
+    const annotate = initAnnotate({
+      render,
+      onSubmit: async (payload) => {
+        statusEl.dataset.submitting = '1';
+        try {
+          const res = await fetch(
+            `/api/engine/projects/${encodeURIComponent(session.projectId)}/annotations`,
+            {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({
+                ...payload,
+                revisionId: session.revisionId,
+              }),
+            },
+          );
+          const body = res.headers.get('content-type')?.includes('json') ? await res.json() : null;
+          lastSubmit = { ok: res.ok, status: res.status, body };
+          statusEl.dataset.submit = JSON.stringify(lastSubmit);
+        } catch (err) {
+          lastSubmit = { ok: false, status: 0, error: String(err?.message || err) };
+          statusEl.dataset.submit = JSON.stringify(lastSubmit);
+        } finally {
+          delete statusEl.dataset.submitting;
+        }
+      },
+    });
+
+    window.__aoAnnotateTest = {
+      render,
+      annotate,
+      async setup({ projectId, revisionId, kind, boxes, page = 1, loadTimeoutMs = 20000 }) {
+        session = { projectId, revisionId };
+        delete statusEl.dataset.submit;
+        delete statusEl.dataset.ready;
+        delete statusEl.dataset.setupError;
+        lastSubmit = null;
+        render.mount({
+          url: `/api/engine/revisions/${encodeURIComponent(revisionId)}/render`,
+          kind,
+          page,
+          revisionId,
+          timeoutMs: loadTimeoutMs,
+        });
+        try {
+          await render.whenLoaded(revisionId, { timeoutMs: loadTimeoutMs + 3000 });
+        } catch (err) {
+          if (kind === 'pdf') {
+            await new Promise((r) => setTimeout(r, 1500));
+          } else {
+            statusEl.dataset.setupError = String(err?.message || err);
+            throw err;
+          }
+        }
+        if (page > 1) render.goToPage(page);
+        annotate.setBoxes(boxes || [], page);
+        annotate.setEnabled(true);
+        statusEl.dataset.ready = '1';
+      },
+      getLastSubmit: () => lastSubmit,
+    };
+  </script>
+</body>
+</html>

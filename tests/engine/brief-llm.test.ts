@@ -86,6 +86,25 @@ describe('engine brief — LLM interpreter', () => {
     });
     expect(mockChat).toHaveBeenCalledOnce();
     expect(result.brief.scenario).toBe('board-review');
+    expect(result.brief.contentGoals).toEqual(['include-metrics', 'compare']);
     expect(result.brief.assumptions).toContain('LLM parsed requirement');
+    expect(result.proposal).toBeUndefined();
+  });
+
+  it('falls back to deterministic when LLM JSON is invalid in auto mode', async () => {
+    process.env.AUTOOFFICE_ENGINE_INTERPRETER = 'auto';
+    mockHealth.mockResolvedValue({ available: true });
+    mockChat.mockResolvedValue('not valid json at all');
+
+    const result = await interpretRequirement({
+      projectId: 'p1',
+      text: '季度汇报',
+      kind: 'presentation',
+      idFactory: createDeterministicIdFactory('brief'),
+      clock: fixedClock(1),
+    });
+    expect(mockChat).toHaveBeenCalledOnce();
+    expect(result.brief.scenario).toBe('business-review');
+    expect(result.proposal).toBeUndefined();
   });
 });

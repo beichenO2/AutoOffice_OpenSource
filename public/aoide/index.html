@@ -195,28 +195,23 @@
       <!-- STAGE: exactly one child visible at a time (JS toggles .ao-hidden) -->
       <div class="ao-stage" id="ao-stage">
 
-        <!-- state: PDF -->
+        <!-- state: PDF / render host (moved into the deck stage in PPT mode) -->
         <div class="ao-stage__inner ao-hidden" id="center-pdf" data-testid="pdf-canvas-container">
-          <article class="ao-page" data-page="1">
-            <div class="ao-doc-body">
-              <h2>季度业务回顾</h2>
-              <p class="ao-lead">本页为渲染占位示意，真实位图由引擎侧注入。</p>
-              <p>第一段正文用于演示纸张的实体质感与可读排版：中央文档区始终不透明，玻璃材质只作用于导航与工具栏，正文对比度不做妥协。</p>
-              <p>第二段继续填充版式，展示行距、字号与留白在纸面上的呼吸感，确保长文阅读舒适。</p>
+          <div class="ao-render" id="ao-render" data-kind="pdf">
+            <div class="ao-render__surface" id="ao-render-surface" data-testid="render-surface">
+              <div class="ao-page-overlay" id="ao-overlay" data-testid="page-overlay" aria-label="批注层"></div>
             </div>
-            <span class="ao-page__num">1</span>
-            <!-- overlay for box-select — engine owner implements selection logic -->
-            <div class="ao-page-overlay" data-testid="page-overlay" data-page="1" aria-label="批注层"></div>
-          </article>
-
-          <article class="ao-page" data-page="2">
-            <div class="ao-page__placeholder">
-              <svg class="ao-icon" style="width:26px;height:26px"><use href="#i-doc"/></svg>
-              <span style="font-size:var(--ao-fs-sm)">第 2 页 · 等待渲染（空态占位，非真实内容）</span>
-            </div>
-            <span class="ao-page__num">2</span>
-            <div class="ao-page-overlay" data-page="2" aria-label="批注层"></div>
-          </article>
+            <p class="ao-render__note" id="ao-render-note">尚未加载渲染结果</p>
+            <form class="ao-annotate ao-glass ao-hidden" id="ao-annotate-form" data-testid="annotate-form">
+              <p class="ao-annotate__target">框选目标：<strong id="ao-annotate-target">—</strong></p>
+              <input class="ao-annotate__input" id="ao-annotate-input" autocomplete="off"
+                     aria-label="修改说明" placeholder="用人话说要怎么改，例如：改为「季度经营回顾」" />
+              <div class="ao-annotate__actions">
+                <button type="submit" class="ao-btn ao-btn--primary">提交修改</button>
+                <button type="button" class="ao-btn ao-btn--ghost" id="ao-annotate-cancel">取消</button>
+              </div>
+            </form>
+          </div>
 
           <!-- compare bar (before / after) — hidden until a change is applied -->
           <section class="ao-compare ao-hidden" data-testid="compare-bar" id="compare-bar" aria-label="修改前后对比">
@@ -234,15 +229,7 @@
         <!-- state: PPT deck -->
         <div class="ao-deck ao-hidden" id="center-deck">
           <div class="ao-thumbs" data-testid="slide-thumbs" id="slide-thumbs" role="listbox" aria-label="幻灯片缩略图"></div>
-          <div class="ao-slide-view">
-            <div class="ao-slide" data-testid="slide-stage" id="slide-stage">
-              <div class="ao-doc-body">
-                <h2>封面 · 标题幻灯片</h2>
-                <p class="ao-lead">16:9 舞台占位示意</p>
-              </div>
-              <div class="ao-page-overlay" data-page="1" aria-label="批注层"></div>
-            </div>
-          </div>
+          <div class="ao-slide-view" id="slide-view" data-testid="slide-stage"></div>
         </div>
 
         <!-- state: loading (skeleton + steps) -->
@@ -277,9 +264,7 @@
             </div>
             <details class="ao-disclosure">
               <summary><svg class="ao-icon ao-icon--sm"><use href="#i-chevron-right"/></svg>查看诊断信息</summary>
-              <pre id="error-diagnostics">render exited with code 1
-! Undefined control sequence.
-l.42 \aoNode{h-3}\badcmd</pre>
+              <pre id="error-diagnostics">（暂无诊断信息）</pre>
             </details>
             <button class="ao-btn ao-btn--primary" data-testid="retry-render" id="retry-render">
               <svg class="ao-icon ao-icon--sm"><use href="#i-retry"/></svg>重试渲染

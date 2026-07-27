@@ -14,6 +14,8 @@ import { initPanels } from './ui/panels.js';
 import { initCenter } from './ui/center.js';
 import { initChat } from './ui/chat.js';
 import { initLeft } from './ui/left.js';
+import { initRender } from './ui/render.js';
+import { initAnnotate } from './ui/annotate.js';
 import { toast } from './ui/components.js';
 import { api, ApiError } from './api.js';
 import * as demo from './demo.js';
@@ -26,12 +28,25 @@ const FORCED = params.get('state');
 initTheme();
 initPanels();
 
+const render = initRender();
+
 const center = initCenter({
   onExport: (fmt) => onExport(fmt),
-  onAnnotateToggle: (on) => toast(on ? '框选批注已开启：在文档上圈出想改的地方' : '框选批注已关闭'),
+  onAnnotateToggle: (on) => {
+    annotate.setEnabled(on);
+    toast(on ? '框选批注已开启：在文档上圈出想改的地方' : '框选批注已关闭');
+  },
   onRetry: () => retryRender(),
   onFit: () => {},
 });
+
+render.onStatusChange((st) => {
+  if (st === 'loading') center.setRenderStatus('pending');
+  else if (st === 'loaded') center.setRenderStatus('rendered');
+  else if (st === 'failed') center.setRenderStatus('failed');
+});
+
+const annotate = initAnnotate({ render, onSubmit: (payload) => submitAnnotation(payload) });
 
 const chat = initChat({
   onSend: (text) => onSend(text),
@@ -55,7 +70,7 @@ document.addEventListener('click', (e) => {
 });
 
 // ---------------------------------------------------------------- app state
-const state = { projectId: null, project: null, proposal: null, messages: [], diff: null };
+const state = { projectId: null, project: null, proposal: null, messages: [], diff: null, revisions: [], revisionId: null };
 
 // ========================= DEMO =========================
 function slideThumb(i, current) {
@@ -121,13 +136,86 @@ async function selectProject(id) {
     left.renderTasks(ov.tasks || []);
     left.renderHistory(ov.revisions || [], ov.project.headRevisionId);
     state.messages = ov.messages || [];
+    state.revisions = ov.revisions || [];
     chat.renderStream({ messages: state.messages });
-    center.setRenderStatus('rendered');
+    await showRevision(ov.project.headRevisionId, ov.project.kind);
   } catch (e) {
     center.setState('error');
     $('#error-msg').textContent = friendly(e);
     toast(friendly(e), 'error');
   }
+}
+
+/**
+ * Mount a revision's *real* render and load its box map, so the centre pane
+ * and the selection overlay always describe the same bytes.
+ */
+async function showRevision(revisionId, kind) {
+  if (!revisionId) {
+    center.setState('empty');
+    center.setRenderStatus('pending');
+    annotate.setBoxes([], 1);
+    return;
+  }
+  const rev = state.revisions.find((r) => r.id === revisionId);
+  if (rev?.renderStatus === 'failed') {
+    center.setState('error');
+    $('#error-msg').textContent = '编译源文件时出错，已为你保留上一版可用文档，内容不会丢失。';
+    $('#error-diagnostics').textContent = rev.renderError || '（引擎未提供诊断信息）';
+    center.setRenderStatus('failed');
+    return;
+  }
+  center.setMode(kind);
+  state.revisionId = revisionId;
+  render.mount({ url: api.renderUrl(revisionId), kind, page: 1, revisionId });
+  try {
+    await render.whenLoaded(revisionId);
+    const { boxes, pageCount } = await api.getBoxes(revisionId, 0);
+    annotate.setBoxes(boxes || [], 1);
+    center.setDoc({ page: 1, pages: pageCount || 1 });
+  } catch (e) {
+    annotate.setBoxes([], 1);
+    if (render.status === 'failed') {
+      toast('渲染加载失败，已保留上一版可用文档', 'error');
+    } else {
+      toast(`未能加载框选映射：${friendly(e)}`, 'error');
+    }
+  }
+}
+
+/** Box selection + instruction → engine. Nothing is applied client-side. */
+async function submitAnnotation(payload) {
+  if (!state.projectId) return toast('请先打开一个文档', 'error');
+  try {
+    chat.setBusy?.(true, '定位并修改');
+    const res = await api.postAnnotation(state.projectId, {
+      page: payload.page,
+      rectNorm: payload.rectNorm,
+      viewport: payload.viewport,
+      instruction: payload.instruction,
+      ...(state.revisionId ? { revisionId: state.revisionId } : {}),
+      ...(payload.domNodeId ? { domNodeId: payload.domNodeId } : {}),
+    });
+    if (res.revision) toast('已按框选定点修改并重新渲染', 'success');
+    else toast(res.annotation?.ambiguityReason || '已记录批注，但还不能安全地直接修改', 'error');
+    await selectProject(state.projectId);
+  } catch (e) {
+    toast(friendly(e), 'error');
+  } finally {
+    chat.setBusy?.(false);
+  }
+}
+
+const BUSY_STATUSES = ['queued', 'interpreting', 'proposing', 'generating', 'editing', 'rendering', 'verifying'];
+
+/** Poll the overview until no task is mid-flight, then refresh every pane. */
+async function pollProject(id, tries = 20) {
+  for (let i = 0; i < tries; i++) {
+    const ov = await api.getOverview(id);
+    if (!(ov.tasks || []).some((t) => BUSY_STATUSES.includes(t.status))) break;
+    await new Promise((r) => setTimeout(r, 600));
+  }
+  await selectProject(id);
 }
 
 async function onSend(text) {
@@ -145,9 +233,11 @@ async function onSend(text) {
   try {
     chat.setBusy(true, '理解需求');
     await api.postRequirement(state.projectId, text);
-    // real UI would poll the task/events; kept minimal here.
+    await pollProject(state.projectId);
   } catch (e) {
     chat.renderStream({ messages: state.messages, error: { message: friendly(e) } });
+  } finally {
+    chat.setBusy?.(false);
   }
 }
 
@@ -178,8 +268,10 @@ function onUndo() {
   if (!DEMO && state.projectId) api.undo(state.projectId).catch((e) => toast(friendly(e), 'error'));
 }
 
-function onRestore(rev) {
-  toast(`恢复到「${rev.label}」`, 'success');
+async function onRestore(rev) {
+  if (DEMO || !state.project) { toast(`演示模式：恢复到「${rev.label}」`); return; }
+  await showRevision(rev.id, state.project.kind);
+  toast(`已切换到「${rev.label}」的渲染结果`, 'success');
 }
 
 function retryRender() {

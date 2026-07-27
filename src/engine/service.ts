@@ -10,18 +10,26 @@ import { systemClock, type Clock } from './clock.js';
 import { undo as undoRevision, redo as redoRevision } from './revisions.js';
 import { emitEvent, listEvents } from './events.js';
 import { assertValid, annotationCreateSchema } from './schema.js';
-import type { AgentTask, Annotation, Project, Revision } from './types.js';
+import type { AgentTask, Annotation, Project, Revision, SourceBox } from './types.js';
+import { buildDeckBoxes, buildPdfBoxes, buildSlidevDeckBoxes, pageCountOf, presentationMeasureHtml } from './boxmap.js';
 import {
   runRequirementPipeline,
   runAnnotationEdit,
   resolveAnnotationCandidates,
+  parseRewriteInstruction,
   generateFromBrief,
+  indexNodes,
   type OrchestratorDeps,
 } from './orchestrator.js';
+import { isHighConfidence } from './html/hit-test.js';
 import { newTask, transitionTask } from './task-state.js';
 import { htmlToPdfBuffer, exportDeckPptxImageFallback, measureDeckBoxes } from './render/deck.js';
+import { pptSourceOfTruth } from './config.js';
+import { SLIDES_MD, slidevExportPptx, hasSlidevCli } from './slidev/index.js';
 import { demoProfiles } from './standards/fixtures.js';
 import { parseLatexNodes } from './latex/resolver.js';
+import { compileLatexSandbox, cleanupCompileDir, containsPathEscape } from './latex/compile.js';
+import type { SourceMap } from './types.js';
 
 export class EngineNotFoundError extends Error {
   readonly code = 'not_found';
@@ -86,7 +94,7 @@ export class EngineService {
       id: this.idFactory('proj'),
       name,
       kind,
-      language: kind === 'presentation' ? 'html' : 'latex',
+      language: kind === 'presentation' ? (pptSourceOfTruth() === 'slidev' ? 'markdown' : 'html') : 'latex',
       headRevisionId: null,
       lastGoodRevisionId: null,
       standardProfileId: 'profile_demo_business',
@@ -150,10 +158,6 @@ export class EngineService {
   async createAnnotation(projectId: string, body: unknown) {
     assertValid(body, annotationCreateSchema, 'annotation');
     const project = await this.requireProject(projectId);
-    if (!project.headRevisionId) throw new EngineValidationError('No head revision');
-
-    const head = await this.repo.getRevision(project.headRevisionId);
-    if (!head) throw new EngineNotFoundError('Head revision missing');
 
     const input = body as {
       page: number;
@@ -163,23 +167,70 @@ export class EngineService {
       nearbyText?: string;
       directNodeId?: string;
       domNodeId?: string;
+      /** Explicit base revision for the framed artefact; defaults to head. */
+      revisionId?: string;
+      baseRevisionId?: string;
     };
 
-    const nodeHint = input.directNodeId ?? input.domNodeId;
+    const baseRevisionId = input.revisionId ?? input.baseRevisionId ?? project.headRevisionId;
+    if (!baseRevisionId) throw new EngineValidationError('No head revision');
 
-    let pdfPath: string | undefined;
-    if (project.kind === 'pdf' && head.renderPath) {
-      pdfPath = this.store.renderAbsPath(head.renderPath);
+    const head = await this.repo.getRevision(baseRevisionId);
+    if (!head) throw new EngineNotFoundError(`Revision not found: ${baseRevisionId}`);
+    if (head.projectId !== project.id) {
+      throw new EngineValidationError('Revision does not belong to this project');
     }
 
-    const candidates = resolveAnnotationCandidates(
+    const boxes = await this.boxesForRevision(head);
+    const mappingStatus = await this.ensureSourceMapAvailability(project, head, boxes);
+    if (mappingStatus === 'mapping_unavailable') {
+      const annotation: Annotation = {
+        id: this.idFactory('ann'),
+        projectId,
+        revisionId: head.id,
+        page: input.page,
+        rectNorm: input.rectNorm,
+        viewport: input.viewport,
+        nearbyText: input.nearbyText,
+        instruction: input.instruction,
+        candidates: [],
+        status: 'ambiguous',
+        createdAt: this.clock(),
+        ambiguityReason: '此旧版本需要重新生成映射（mapping_unavailable）',
+      };
+      await this.repo.putAnnotation(annotation);
+      await emitEvent(this.store, 'annotation.created', projectId, {
+        annotationId: annotation.id,
+        mapping: 'unavailable',
+      });
+      return { annotation, mapping: 'unavailable' as const };
+    }
+
+    // Client directNodeId/domNodeId/label/score are untrusted hints only.
+    // Server re-ranks against the persisted SourceMap for this revision+page.
+    const candidates = resolveAnnotationCandidates({
       project,
       head,
-      input.page,
-      input.rectNorm,
-      input.directNodeId ?? input.domNodeId,
-      pdfPath,
-    );
+      page: input.page,
+      rectNorm: input.rectNorm,
+      boxes,
+      domNodeId: input.directNodeId ?? input.domNodeId,
+    });
+
+    // Geometry uses isHighConfidence (top≥0.6 AND margin≥0.2 vs #2).
+    // Wording must literally state the replacement. Either gate failing → open/ambiguous.
+    const rewrite = parseRewriteInstruction(input.instruction);
+    const top = candidates[0];
+    const confident = isHighConfidence(candidates);
+    const ambiguityReason = !candidates.length
+      ? '框选区域没有命中任何可编辑节点'
+      : !confident
+        ? candidates.length > 1
+          ? '框选同时命中多个候选，分差不足以直接修改'
+          : '框选置信度不足，无法直接修改'
+        : !rewrite.literal
+          ? '已定位到目标，但指令没有说明要改成什么内容'
+          : undefined;
 
     const annotation: Annotation = {
       id: this.idFactory('ann'),
@@ -193,15 +244,128 @@ export class EngineService {
       candidates,
       status: candidates.length ? 'open' : 'ambiguous',
       createdAt: this.clock(),
+      ...(ambiguityReason ? { ambiguityReason } : {}),
     };
     await this.repo.putAnnotation(annotation);
     await emitEvent(this.store, 'annotation.created', projectId, { annotationId: annotation.id });
+    await emitEvent(
+      this.store,
+      confident && rewrite.literal ? 'target.resolved' : 'target.ambiguous',
+      projectId,
+      { annotationId: annotation.id, nodeId: top?.nodeId, label: top?.label },
+    );
 
-    if (candidates.length > 0 && candidates[0]!.score >= 0.6) {
-      const edited = await runAnnotationEdit(this.deps(), project, annotation, candidates[0]!.nodeId);
-      return { annotation: edited.revision ? { ...annotation, status: 'resolved' as const } : annotation, revision: edited.revision };
+    if (top && confident && rewrite.literal) {
+      // Edit is based on the framed revision, not silently on a newer head.
+      const edited = await runAnnotationEdit(
+        this.deps(),
+        project,
+        annotation,
+        top.nodeId,
+        rewrite.text,
+        { baseRevisionId: head.id },
+      );
+      return {
+        annotation: {
+          ...annotation,
+          status: 'resolved' as const,
+          resolvedRevisionId: edited.revision.id,
+        },
+        revision: edited.revision,
+      };
     }
     return { annotation };
+  }
+
+  /**
+   * Box map for a revision: the persisted one when present, otherwise measured
+   * on the fly so revisions created before the map existed still resolve.
+   */
+  private async boxesForRevision(rev: Revision): Promise<SourceBox[]> {
+    if (rev.sourceMapId) {
+      const map = await this.repo.getSourceMap(rev.sourceMapId);
+      if (map?.boxes?.length) return map.boxes;
+    }
+    const html = presentationMeasureHtml(rev.source);
+    if (html) return buildDeckBoxes(html);
+    if (rev.source.some((f) => f.path === SLIDES_MD)) return buildSlidevDeckBoxes(rev.source);
+    return [];
+  }
+
+  /**
+   * Old PDF revisions without a persisted SourceMap: rebuild SyncTeX boxes from
+   * saved LaTeX in an isolated temp dir, or return mapping_unavailable.
+   * Never invent targets from screenshots. Mutates `boxes` in place on success.
+   */
+  private async ensureSourceMapAvailability(
+    project: Project,
+    rev: Revision,
+    boxes: SourceBox[],
+  ): Promise<'ok' | 'mapping_unavailable'> {
+    if (boxes.length > 0) return 'ok';
+
+    if (project.kind === 'presentation') {
+      if (boxes.length > 0) return 'ok';
+      const html = presentationMeasureHtml(rev.source);
+      if (html) {
+        try {
+          const rebuilt = await buildDeckBoxes(html);
+          if (rebuilt.length) {
+            const nodes = [...indexNodes(project, rev.source).values()];
+            const map: SourceMap = {
+              id: this.idFactory('map'),
+              revisionId: rev.id,
+              nodes,
+              boxes: rebuilt,
+            };
+            await this.repo.putSourceMap(map);
+            rev.sourceMapId = map.id;
+            await this.repo.putRevision(rev);
+            boxes.push(...rebuilt);
+            return 'ok';
+          }
+        } catch {
+          return 'mapping_unavailable';
+        }
+      }
+      return 'mapping_unavailable';
+    }
+
+    const tex =
+      rev.source.find((f) => f.path.endsWith('.tex') || f.language === 'latex')?.content ??
+      rev.source[0]?.content;
+    if (!tex || containsPathEscape(tex)) return 'mapping_unavailable';
+
+    let workDir: string | undefined;
+    try {
+      const compiled = await compileLatexSandbox(tex);
+      workDir = compiled.workDir;
+      if (!compiled.ok || !compiled.pdf) return 'mapping_unavailable';
+
+      const nodes = parseLatexNodes(tex);
+      const rebuilt = buildPdfBoxes(tex, nodes, {
+        workDir: compiled.workDir,
+        texName: 'main.tex',
+        pdfName: 'main.pdf',
+      });
+      if (!rebuilt.length) return 'mapping_unavailable';
+
+      const map: SourceMap = {
+        id: this.idFactory('map'),
+        revisionId: rev.id,
+        nodes,
+        boxes: rebuilt,
+      };
+      await this.repo.putSourceMap(map);
+      rev.sourceMapId = map.id;
+      await this.repo.putRevision(rev);
+      boxes.push(...rebuilt);
+      return 'ok';
+    } catch {
+      return 'mapping_unavailable';
+    } finally {
+      if (workDir) await cleanupCompileDir(workDir);
+    }
   }
 
   async chooseProposal(proposalId: string, optionId: string): Promise<{ task: AgentTask }> {
@@ -243,24 +407,24 @@ export class EngineService {
     };
   }
 
+  /** Labelled box map for a revision. `page <= 0` returns every page. */
   async getBoxes(revisionId: string, page: number) {
     const rev = await this.repo.getRevision(revisionId);
     if (!rev) throw new EngineNotFoundError('Revision not found');
-    const html = rev.source.find((f) => f.path === 'deck.html')?.content;
-    if (html) {
-      const measured = await measureDeckBoxes(html);
-      return { boxes: measured.filter((b) => b.page === page) };
-    }
-    const tex = rev.source[0]?.content ?? '';
-    return { boxes: parseLatexNodes(tex) };
+    const boxes = await this.boxesForRevision(rev);
+    return {
+      pageCount: pageCountOf(boxes),
+      boxes: page > 0 ? boxes.filter((b) => b.page === page) : boxes,
+    };
   }
 
   async getDiff(revisionId: string) {
     const rev = await this.repo.getRevision(revisionId);
     if (!rev) throw new EngineNotFoundError('Revision not found');
+    const intent = rev.editIntentId ? await this.repo.getEditIntent(rev.editIntentId) : null;
     return {
       baseRevisionId: rev.baseRevisionId,
-      changedNodeIds: [] as string[],
+      changedNodeIds: intent?.targetNodeIds ?? [],
       patchSummary: rev.patchSummary ?? '',
     };
   }
@@ -276,13 +440,48 @@ export class EngineService {
       return { buffer, mime: 'application/pdf', filename: `${project.name}.pdf` };
     }
 
-    const html = head.source.find((f) => f.path === 'deck.html')?.content ?? '';
+    const isSlidev = head.source.some((f) => f.path === SLIDES_MD);
+    const html =
+      head.source.find((f) => f.path === 'deck.html')?.content ??
+      presentationMeasureHtml(head.source) ??
+      '';
+
     if (format === 'html') {
+      if (isSlidev) {
+        const md = head.source.find((f) => f.path === SLIDES_MD)!.content;
+        return { buffer: Buffer.from(md, 'utf-8'), mime: 'text/markdown', filename: `${project.name}.md` };
+      }
       return { buffer: Buffer.from(html, 'utf-8'), mime: 'text/html', filename: `${project.name}.html` };
     }
     if (format === 'pdf') {
+      if (isSlidev && hasSlidevCli()) {
+        try {
+          const { slidevExport, cleanupSlidevWorkDir } = await import('./slidev/index.js');
+          const { readFile } = await import('node:fs/promises');
+          const { workDir, outputPath } = await slidevExport(head.source, ['--format', 'pdf']);
+          const buffer = await readFile(outputPath);
+          await cleanupSlidevWorkDir(workDir);
+          return { buffer, mime: 'application/pdf', filename: `${project.name}.pdf` };
+        } catch {
+          // fall through to HTML→PDF
+        }
+      }
       const buffer = await htmlToPdfBuffer(html);
       return { buffer, mime: 'application/pdf', filename: `${project.name}.pdf` };
+    }
+
+    // PPTX — Slidev export is image-based (text not selectable); legacy HTML uses pptxgenjs fallback.
+    if (isSlidev && hasSlidevCli()) {
+      try {
+        const buffer = await slidevExportPptx(head.source);
+        return {
+          buffer,
+          mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+          filename: `${project.name}.pptx`,
+        };
+      } catch {
+        // fall through to legacy
+      }
     }
     const buffer = await exportDeckPptxImageFallback(html);
     return {

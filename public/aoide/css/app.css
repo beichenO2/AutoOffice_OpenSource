@@ -562,3 +562,66 @@ body.ao-resizing { cursor: col-resize; user-select: none; }
   .ao-app.is-drawer-open .ao-scrim { opacity: 1; pointer-events: auto; }
 }
 @media (min-width: 981px) { .ao-scrim { display: none; } }
+
+/* ============================================================
+   Real render surface + box-select overlay
+   The document itself stays opaque paper; glass is reserved for
+   the annotation affordance floating above it.
+   ============================================================ */
+.ao-render { position: relative; display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%; }
+.ao-render__surface {
+  position: relative;
+  width: min(100%, 820px);
+  background: var(--ao-paper);
+  border-radius: var(--ao-radius-md);
+  box-shadow: var(--ao-shadow-md);
+  overflow: hidden;
+}
+.ao-render[data-kind='presentation'] .ao-render__surface { width: min(100%, 960px); }
+.ao-render__frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: var(--ao-paper); }
+.ao-render__staging { position: absolute; width: 0; height: 0; overflow: hidden; opacity: 0; pointer-events: none; }
+.ao-render__note { font-size: var(--ao-fs-sm); color: var(--ao-text-dim); text-align: center; }
+
+/* Overlay is inert until annotate mode is on, so the document stays usable. */
+.ao-page-overlay { pointer-events: none; }
+.ao-app.is-annotating .ao-page-overlay { pointer-events: auto; touch-action: none; }
+
+.ao-box { position: absolute; pointer-events: none; }
+.ao-box-hint {
+  position: absolute;
+  max-width: 90%;
+  padding: 3px 8px;
+  border-radius: var(--ao-radius-sm);
+  background: var(--ao-accent);
+  color: #fff;
+  font-size: var(--ao-fs-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  z-index: 6;
+}
+.ao-box-hint.is-empty { background: var(--ao-text-dim); }
+
+.ao-annotate {
+  position: relative;
+  width: min(100%, 820px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: var(--ao-radius-md);
+  z-index: 7;
+}
+.ao-annotate__target { font-size: var(--ao-fs-sm); color: var(--ao-text-dim); }
+.ao-annotate__target strong { color: var(--ao-text); font-weight: var(--ao-fw-medium); }
+.ao-annotate__input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--ao-border);
+  border-radius: var(--ao-radius-sm);
+  background: var(--ao-surface);
+  color: var(--ao-text);
+  font: inherit;
+}
+.ao-annotate__actions { display: flex; gap: 8px; justify-content: flex-end; }

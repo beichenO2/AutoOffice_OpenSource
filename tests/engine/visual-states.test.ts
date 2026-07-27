@@ -73,7 +73,12 @@ describe('AOIDE visual states (Playwright)', () => {
     await mkdir(BASELINE_DIR, { recursive: true });
     serverProcess = fork(join(import.meta.dirname, '..', '..', 'dist', 'cli.js'), ['serve', '-p', String(PORT)], {
       stdio: 'pipe',
-      env: { ...process.env, AUTOOFFICE_DIRECT_PORT: '1' },
+      env: {
+        ...process.env,
+        NODE_ENV: 'test',
+        AUTOOFFICE_DIRECT_PORT: '1',
+        AUTOOFFICE_BOXMAP: 'estimate',
+      },
     });
     await new Promise<void>((resolve) => {
       const tick = () => {
@@ -94,7 +99,7 @@ describe('AOIDE visual states (Playwright)', () => {
       const page = await browser!.newPage({ viewport: { width: 1440, height: 900 } });
       await page.goto(state.url, { waitUntil: 'networkidle' });
       if (state.setup) await state.setup(page);
-      await expect(page.locator(state.visible)).toBeVisible();
+      expect(await page.locator(state.visible).isVisible()).toBe(true);
 
       const shotPath = join(BASELINE_DIR, `${state.name}.png`);
       const update = process.env.AUTOOFFICE_VISUAL_UPDATE === '1';

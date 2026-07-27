@@ -70,10 +70,10 @@ const llmPayloadSchema = {
       },
     },
     proposal: {
+      optional: true,
       schema: {
         kind: 'object' as const,
         additional: false,
-        optional: true,
         fields: {
           question: { schema: { kind: 'string' as const, minLength: 1 } },
           options: { schema: { kind: 'array' as const, items: proposalOptionSchema, minItems: 2, maxItems: 4 } },
@@ -181,7 +181,7 @@ async function interpretRequirementViaLlm(input: InterpretInput): Promise<Interp
     { capability: '1001', temperature: 0.2, maxTokens: 2048 },
   );
 
-  const parsed = parseLlmJson(raw);
+  const parsed = normalizeLlmPayload(parseLlmJson(raw));
   const checked = validate(parsed, llmPayloadSchema);
   if (!checked.ok) {
     throw new Error(`LLM brief invalid: ${checked.errors.join('; ')}`);
@@ -213,7 +213,7 @@ async function interpretRequirementViaLlm(input: InterpretInput): Promise<Interp
     }
   }
 
-  return { brief, proposal: payload.proposal };
+  return { brief, ...(payload.proposal ? { proposal: payload.proposal } : {}) };
 }
 
 function parseLlmJson(text: string): unknown {
@@ -223,6 +223,14 @@ function parseLlmJson(text: string): unknown {
   const end = body.lastIndexOf('}');
   if (start < 0 || end <= start) throw new Error('LLM response contained no JSON object');
   return JSON.parse(body.slice(start, end + 1));
+}
+
+/** Coerce documented nulls (`proposal: null`) to absent before schema validate. */
+function normalizeLlmPayload(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return raw;
+  const obj = { ...(raw as Record<string, unknown>) };
+  if (obj.proposal === null) delete obj.proposal;
+  return obj;
 }
 
 function extractGoals(text: string): string[] {
