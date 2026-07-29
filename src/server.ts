@@ -239,6 +239,12 @@ export async function startServer(port: number = 3900): Promise<void> {
 
   app.post('/api/enrich', async (req, res) => {
     try {
+      if ((process.env.AUTOOFFICE_KNOWLEVERAGE_ENABLED ?? '').trim().toLowerCase() !== 'on') {
+        res.status(410).json({
+          error: 'KnowLever v1 enrich paused (archived RAG). Set AUTOOFFICE_KNOWLEVERAGE_ENABLED=on to force legacy path.',
+        });
+        return;
+      }
       const { markdown, maxQueries, topK } = req.body as { markdown?: string; maxQueries?: unknown; topK?: unknown };
       if (!markdown) {
         res.status(400).json({ error: 'Missing required field: markdown' });

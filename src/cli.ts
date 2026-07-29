@@ -287,6 +287,12 @@ program
   .option('-k, --top-k <n>', 'Number of RAG results per query', '3')
   .option('-q, --max-queries <n>', 'Maximum number of RAG queries', '3')
   .action(async (opts) => {
+    if ((process.env.AUTOOFFICE_KNOWLEVERAGE_ENABLED ?? '').trim().toLowerCase() !== 'on') {
+      console.error(
+        'KnowLever v1 enrich paused (archived RAG). Set AUTOOFFICE_KNOWLEVERAGE_ENABLED=on only for emergency legacy path.',
+      );
+      process.exit(1);
+    }
     const { enrichWithRAG, normalizePositiveIntegerOption } = await import('./integrations/knowleverage.js');
     let markdown: string;
     if (opts.input) {

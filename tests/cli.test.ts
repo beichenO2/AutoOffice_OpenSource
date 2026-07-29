@@ -208,12 +208,18 @@ describe('cli — autooffice', () => {
     }
   });
 
-  it('enrich command preserves crafted headings without Python syntax failures', async () => {
-    const markdown = ['# bad\\', '', 'Body content.'].join('\n');
-    const { stdout } = await exec('node', [CLI, 'enrich', '--text', markdown, '--max-queries', '1', '--top-k', '1']);
-    expect(stdout).toContain('Querying KnowLeverage RAG engine...');
-    expect(stdout).toContain('"bad\\":');
-    expect(stdout).not.toMatch(/SyntaxError|EOL while scanning string literal/);
+  it('enrich command exits with paused error by default', async () => {
+    const markdown = ['# Topic', '', 'Body content.'].join('\n');
+    try {
+      await exec('node', [CLI, 'enrich', '--text', markdown, '--max-queries', '1', '--top-k', '1'], {
+        env: { ...process.env, AUTOOFFICE_KNOWLEVERAGE_ENABLED: '' },
+      });
+      expect.fail('expected enrich to exit non-zero when v1 enrich is paused');
+    } catch (err: unknown) {
+      const e = err as { code?: number; stderr?: string; message?: string };
+      expect(e.code).toBe(1);
+      expect(String(e.stderr ?? e.message ?? '')).toMatch(/paused|archived/i);
+    }
   }, 20000);
 
   it('quality command creates parent directories for --output', async () => {

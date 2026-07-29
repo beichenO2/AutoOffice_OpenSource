@@ -287,6 +287,21 @@ export async function enrichWithRAG(
   markdown: string,
   options: { maxQueries?: number; topK?: number } = {},
 ): Promise<EnrichmentResult> {
+  // KnowLever v1 RAG archived — default off. Emergency: AUTOOFFICE_KNOWLEVERAGE_ENABLED=on
+  if ((process.env.AUTOOFFICE_KNOWLEVERAGE_ENABLED ?? '').trim().toLowerCase() !== 'on') {
+    const disabled: RAGQueryResult = {
+      query: '(disabled)',
+      success: false,
+      context: '',
+      error: 'KnowLever v1 enrich paused (set AUTOOFFICE_KNOWLEVERAGE_ENABLED=on to force legacy path)',
+    };
+    return {
+      original: markdown,
+      enriched: markdown,
+      ragContexts: [disabled],
+      enrichmentCount: 0,
+    };
+  }
   const maxQueries = normalizePositiveIntegerOption(options.maxQueries) ?? 3;
   const topK = Math.min(100, normalizePositiveIntegerOption(options.topK) ?? 3);
   const topics = extractTopics(markdown);

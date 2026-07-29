@@ -153,66 +153,15 @@ describe('server — HTTP API', () => {
     expect(res.status).toBe(400);
   });
 
-  it('enrich endpoint falls back to defaults for invalid numeric options', async () => {
-    const markdown = [
-      '# Topic A',
-      '',
-      '## Topic B',
-      '',
-      '## Topic C',
-      '',
-      '## Topic D',
-    ].join('\n');
+  it('enrich endpoint returns 410 when KnowLever v1 enrich is paused', async () => {
     const res = await httpReq('POST', '/api/enrich', {
-      markdown,
-      maxQueries: 'oops',
-      topK: { bad: true },
-    });
-    expect(res.status).toBe(200);
-    const data = JSON.parse(res.body);
-    expect(data.ragContexts.map((item: { query: string }) => item.query)).toEqual([
-      'Topic A',
-      'Topic B',
-      'Topic C',
-    ]);
-  }, 20000);
-
-  it('enrich endpoint falls back to defaults for negative numeric options', async () => {
-    const markdown = [
-      '# Topic A',
-      '',
-      '## Topic B',
-      '',
-      '## Topic C',
-      '',
-      '## Topic D',
-    ].join('\n');
-    const res = await httpReq('POST', '/api/enrich', {
-      markdown,
-      maxQueries: -1,
-      topK: -2,
-    });
-    expect(res.status).toBe(200);
-    const data = JSON.parse(res.body);
-    expect(data.ragContexts.map((item: { query: string }) => item.query)).toEqual([
-      'Topic A',
-      'Topic B',
-      'Topic C',
-    ]);
-  }, 20000);
-
-  it('enrich endpoint preserves crafted headings without Python syntax failures', async () => {
-    const markdown = ['# bad\\', '', 'Body content.'].join('\n');
-    const res = await httpReq('POST', '/api/enrich', {
-      markdown,
+      markdown: '# Topic A\n\nBody',
       maxQueries: 1,
       topK: 1,
     });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(410);
     const data = JSON.parse(res.body);
-    expect(data.ragContexts).toHaveLength(1);
-    expect(data.ragContexts[0].query).toBe('bad\\');
-    expect((data.ragContexts[0].error ?? '') as string).not.toMatch(/SyntaxError|EOL while scanning string literal/);
+    expect(String(data.error)).toMatch(/paused|archived/i);
   });
 
   it('wiki endpoint writes inside the controlled API root', async () => {
