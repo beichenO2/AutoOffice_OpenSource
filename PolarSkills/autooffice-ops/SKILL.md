@@ -7,8 +7,10 @@
 | 维度 | 值 |
 |---|---|
 | 健康端点 | 端口 3900（/health） |
+| PolarManager | Port `:11050` · Process `:11055` · Budget `:11060` |
 | 生命周期权威 | PolarProcess 服务 `autooffice` |
-| 端口权威 | PolarPort（3900） |
+| 端口权威 | PolarPort（preferred 3900） |
+| CPU 预算 | PolarBudget（重报告/批量渲染前 `polarbudget-core-budget`） |
 | 安装命令 | `npm ci` |
 | 技术栈 | Node.js, TypeScript, PptxGenJS, docx, Playwright (PDF), Handlebars |
 
@@ -23,7 +25,8 @@ curl -fsS -X POST http://127.0.0.1:11055/api/services/autooffice/start
 ```
 
 禁止直接运行 `serve`、后台 `&`、`nohup`、PID 文件或直接信号。停止和重启也
-只能调用 PolarProcess 的精确 `autooffice` 接口；端口只能由 PolarPort 分配。
+只能调用 PolarProcess 的精确 `autooffice` 接口；端口只能由 PolarPort 分配；
+禁止自建第二套 CPU 调度器（走 PolarBudget）。
 
 ## 健康检查
 
