@@ -1,7 +1,7 @@
 # AutoOffice IDE Engine — Project State
 
 > Canonical worktree: `~/Polarisor/AutoOffice`  
-> Last verified: 2026-07-27 — `npm run build` + `npm test` → **546 passed, 1 skipped** (547 total)
+> Last verified: 2026-08-01 — `npm run build` + `npm test` → **545 passed, 0 skipped, 0 failed** (545 total, 67 files). `@slidev/cli` installed → Slidev CLI integration runs (no skip).
 
 ## Goal
 
@@ -14,7 +14,7 @@ Evolve AutoOffice from batch report generation into a **document intelligence en
 | A | Three-pane Liquid Glass UI at `/aoide/` | **DONE** | `public/aoide/*`, static mount in `src/engine/routes.ts` |
 | B | Agent runtime: projects, tasks, revisions, events, proposals | **DONE** | `src/engine/{types,store,repo,service,orchestrator}.ts` |
 | C | PDF loop: NL → LaTeX → compile → annotate → patch → recompile → undo | **DONE** | `tests/engine/e2e-engine.test.ts` (service + SEC-5 rebuild); `tests/engine/annotate-browser.test.ts` (PDF iframe drag) |
-| D | PPT loop: NL → deck → box edit → re-render → undo → export | **DONE** | Slidev SoT svc + browser E2E; legacy HTML in `e2e-engine.test.ts`; CLI build test skipped until `npm install` |
+| D | PPT loop: NL → deck → box edit → re-render → undo → export | **DONE** | Slidev SoT svc + browser E2E; legacy HTML in `e2e-engine.test.ts`; CLI `slidev build` integration passes (CLI installed) |
 | E | Standards Engine (Demo/Fixture only, no fake 国标) | **DONE** | `src/engine/standards/*`, profiles labeled Demo in fixtures |
 | F | Render sandbox: path confinement, timeout, no shell-escape default | **DONE** | `src/engine/latex/compile.ts`, `src/engine/slidev/cli.ts`, `tests/engine/security.test.ts` |
 | G | Express `/api/engine/*` wired into server | **DONE** | `src/engine/routes.ts`, `src/server.ts`, `tests/engine/api-routes.test.ts` |
@@ -24,7 +24,7 @@ Evolve AutoOffice from batch report generation into a **document intelligence en
 
 | ID | Requirement | Status | Notes |
 |----|-------------|--------|-------|
-| AD6 | Slidev (`slides.md`) as PPT source-of-truth | **PARTIAL** | Unit + svc + browser E2E pass via preview HTML; **`slidev build` integration skipped** until `@slidev/cli` installs |
+| AD6 | Slidev (`slides.md`) as PPT source-of-truth | **DONE** | `@slidev/cli@52.15.2` + `@slidev/theme-default@0.25.0` installed 2026-08-01; `slidev build` integration passes (isolated work dir symlinks project `node_modules`). Live center preview uses self-contained preview HTML (matches boxmap); CLI build/export are on-demand deliverables. |
 | AD8 | Legacy HTML + pptxgenjs compatibility bridge | **DONE** | `AUTOOFFICE_PPT_SOT=html`; `exportDeckPptxImageFallback`; `/api/generate` unchanged |
 
 **PPTX disclosure:** Slidev `slidev export --format pptx` produces **image-based** slides — text is **not selectable** in PowerPoint. Legacy HTML path uses the same pptxgenjs image fallback.
@@ -41,7 +41,7 @@ npx vitest run
 npm run test:visual-states
 ```
 
-Latest full run (2026-07-27): **67 files, 546 passed, 1 skipped** (`slidev build` integration skipped when CLI unavailable).
+Latest full run (2026-08-01): **67 files, 545 passed, 0 skipped, 0 failed** (Slidev CLI integration runs after install).
 
 Requires `xelatex` for PDF E2E (`tests/engine/e2e-engine.test.ts`, PDF row in `tests/engine/annotate-browser.test.ts`).
 
@@ -71,8 +71,8 @@ Production serve uses PolarProcess/PolarPort; tests use `AUTOOFFICE_DIRECT_PORT=
 
 ## Known Gaps / NOT RUN
 
-- `@slidev/cli` npm install — **BLOCKED** (ECONNRESET to registry.npmjs.org 2026-07-27); preview HTML + unit/svc/browser E2E pass without CLI
-- Slidev `slidev build` integration test — **skipped** until CLI installed
+- `@slidev/cli` npm install — **DONE** (2026-08-01, network restored; `@slidev/cli@52.15.2` + `@slidev/theme-default@0.25.0` + `playwright-chromium@1.61.1` installed)
+- Slidev `slidev build` integration test — **PASS** (runs in `slidev-bridge.test.ts`, no longer skipped)
 - Real LLM Requirement Interpreter — **DONE** via `src/engine/brief.ts` + LLM Proxy (`AUTOOFFICE_ENGINE_INTERPRETER=auto|llm|deterministic`); offline/tests use deterministic
 - SyncTeX reverse lookup under load — unit-tested resolver; full pixel-accuracy E2E **partial**
 - Playwright visual regression (9 UI states) — **DONE** — baselines in `tests/engine/visual-baseline/`; `npm run test:visual-states`

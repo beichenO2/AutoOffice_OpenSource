@@ -4,7 +4,7 @@
  */
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { access, cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, cp, mkdir, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { constants } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -112,6 +112,11 @@ export async function writeSlidevWorkDir(source: SourceFile[]): Promise<string> 
     await mkdir(dirname(dest), { recursive: true });
     await writeFile(dest, file.content, 'utf-8');
   }
+  // The isolated work dir lives under the OS temp root, so Slidev/Vite cannot
+  // resolve the theme (`@slidev/theme-default`), vue, or addons from it. Link the
+  // project's node_modules in so module resolution succeeds. Cleanup (`rm`
+  // recursive) unlinks this symlink without following it into the real tree.
+  await symlink(join(projectRoot(), 'node_modules'), join(dir, 'node_modules'), 'dir').catch(() => {});
   return dir;
 }
 
@@ -142,28 +147,40 @@ export async function slidevBuild(source: SourceFile[], timeoutMs = DEFAULT_TIME
   }
 }
 
-/** `slidev export` — PDF or PNG depending on args. Caller cleans workDir. */
+/** `slidev export` — PDF / PPTX / PNG depending on args. Caller cleans workDir. */
 export async function slidevExport(
   source: SourceFile[],
   extraArgs: string[],
   timeoutMs = DEFAULT_TIMEOUT_MS,
 ): Promise<{ workDir: string; outputPath: string }> {
   const workDir = await writeSlidevWorkDir(source);
-  const outName = extraArgs.includes('--format') ? 'export-out' : 'slides-export.pdf';
+  const formatIdx = extraArgs.indexOf('--format');
+  const format = formatIdx >= 0 ? extraArgs[formatIdx + 1] : 'pdf';
+  const ext = format === 'pptx' ? 'pptx' : format === 'png' ? 'png' : format === 'md' ? 'md' : 'pdf';
+  // Single explicit output filename whose extension matches the format, so the
+  // path we read back always matches what Slidev writes. (Previously a
+  // `--format` run passed `--output export-out` but then looked for
+  // `slides-export.pptx`/`.pdf` → ENOENT; it silently never worked because the
+  // CLI export path had never actually run until @slidev/cli + the browser were
+  // installed.)
+  const outName = `slides-export.${ext}`;
   const args = ['export', SLIDES_MD, ...extraArgs, '--output', outName];
   const result = await runSlidev(args, workDir, timeoutMs);
   if (result.exitCode !== 0) {
     await rm(workDir, { recursive: true, force: true }).catch(() => {});
     throw new Error(`slidev export failed (${result.exitCode}): ${result.stderr || result.stdout}`);
   }
-  const formatIdx = extraArgs.indexOf('--format');
-  const format = formatIdx >= 0 ? extraArgs[formatIdx + 1] : 'pdf';
-  const outputPath =
-    format === 'pptx'
-      ? join(workDir, 'slides-export.pptx')
-      : format === 'png'
-        ? join(workDir, 'slides-export.png')
-        : join(workDir, outName.endsWith('.pdf') ? outName : 'slides-export.pdf');
+  // Prefer the exact requested name; fall back to any produced file with the
+  // expected extension (Slidev naming can vary by version/format).
+  let outputPath = join(workDir, outName);
+  try {
+    await access(outputPath, constants.R_OK);
+  } catch {
+    const entries = await readdir(workDir).catch(() => [] as string[]);
+    const hit = entries.find((f) => f.toLowerCase().endsWith(`.${ext}`));
+    if (hit) outputPath = join(workDir, hit);
+    else throw new Error(`slidev export produced no .${ext} in ${workDir} (saw: ${entries.join(', ') || 'nothing'})`);
+  }
   return { workDir, outputPath };
 }
 
@@ -171,10 +188,14 @@ export async function slidevExport(
  * `slidev export --format pptx` — image-based PPTX (text not selectable).
  * See https://sli.dev/guide/exporting
  */
-export async function slidevExportPptx(source: SourceFile[], timeoutMs = DEFAULT_TIMEOUT_MS): Promise<Buffer> {
+export async function slidevExportPptx(
+  source: SourceFile[],
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+  withClicks = false,
+): Promise<Buffer> {
   const { workDir, outputPath } = await slidevExport(
     source,
-    ['--format', 'pptx'],
+    ['--format', 'pptx', ...(withClicks ? ['--with-clicks'] : [])],
     timeoutMs,
   );
   try {

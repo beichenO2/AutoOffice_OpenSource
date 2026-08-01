@@ -101,7 +101,7 @@ describe.skipIf(!hasXelatex)('engine E2E — PDF LaTeX', () => {
     const render = await svc.getRevisionRender(overview.project.headRevisionId!);
     expect(render.mime).toBe('application/pdf');
     expect(render.buffer.subarray(0, 4).toString()).toBe('%PDF');
-  });
+  }, 120000);
 
   it('requirement → PDF → box edit → undo restores prior LaTeX', async () => {
     const { project } = await svc.createProject('PDF框选', 'pdf');
@@ -139,7 +139,10 @@ describe.skipIf(!hasXelatex)('engine E2E — PDF LaTeX', () => {
 
     const undone = await svc.undo(project.id);
     expect(undone?.project.headRevisionId).toBe(head.id);
-  });
+    // Real E2E does two xelatex compiles (generate + re-render after patch);
+    // under full-suite parallel load this exceeds Vitest's 5s default, so it
+    // gets the same explicit budget as the sibling xelatex tests below.
+  }, 120000);
 
   it('rebuilds SyncTeX map for legacy PDF revision without sourceMapId', async () => {
     const { project } = await svc.createProject('旧PDF映射', 'pdf');
@@ -225,5 +228,102 @@ describe('engine E2E — Slidev SoT', () => {
 
     const undone = await svc.undo(project.id);
     expect(undone?.project.headRevisionId).toBe(head.id);
+  });
+});
+
+describe('engine E2E — deck-wide term unification (PPT skill #4, text axis)', () => {
+  beforeEach(() => {
+    process.env.AUTOOFFICE_PPT_SOT = 'slidev';
+    process.env.AUTOOFFICE_LLM_EDIT = '1'; // enables the scope-classifier routing (no LLM call on the deterministic text path)
+  });
+  afterEach(() => {
+    delete process.env.AUTOOFFICE_PPT_SOT;
+    delete process.env.AUTOOFFICE_LLM_EDIT;
+  });
+
+  it('a framed「把全部…统一改成…」routes to a deterministic deck-wide rename, undoable', async () => {
+    const { project } = await svc.createProject('术语统一', 'presentation');
+    await svc.postRequirement(project.id, '做一份季度业务汇报，包含数据和对比分析');
+    const overview = await svc.getOverview(project.id);
+    const head = overview.revisions.at(-1)!;
+    const slidesMd = head.source.find((f) => f.path === 'slides.md')!.content;
+
+    // Pick a short term that actually appears as visible text in the framed node.
+    const b0Text = /data-ao-id="slide-2-b0"[^>]*>([^<]+)</.exec(slidesMd)?.[1] ?? '';
+    expect(b0Text.length).toBeGreaterThan(1);
+    const from = b0Text.slice(0, 2);
+    const to = 'AO替换完成';
+
+    const { boxes } = await svc.getBoxes(head.id, 2);
+    const target = boxes.find((b) => b.nodeId === 'slide-2-b0');
+    expect(target).toBeTruthy();
+    const rectNorm = { x: target!.x, y: target!.y, w: Math.max(0.02, target!.w), h: Math.max(0.02, target!.h) };
+
+    const edited = await svc.createAnnotation(project.id, {
+      page: 2,
+      rectNorm,
+      viewport: { zoom: 1, rotation: 0, dpr: 1, pageWidthPx: 1280, pageHeightPx: 720 },
+      instruction: `把全部「${from}」统一改成「${to}」`,
+      directNodeId: 'slide-2-b0',
+      revisionId: head.id,
+    });
+
+    // Routed to the deck-wide text path (not a local single rewrite / LLM call).
+    expect(edited.revision).toBeTruthy();
+    expect(edited.revision!.patchSummary).toMatch(/^deckTextReplace\(/);
+    const after = edited.revision!.source.find((f) => f.path === 'slides.md')!.content;
+    expect(after).toContain(to);
+    expect(after).toContain('data-ao-id="slide-2-b0"'); // stable id → boxmap contract intact
+    expect(after.startsWith('---')).toBe(true); // frontmatter intact
+
+    const undone = await svc.undo(project.id);
+    expect(undone?.project.headRevisionId).toBe(head.id);
+  });
+
+  it('clamps an out-of-range framed rect (edge-component overhang) instead of 500ing', async () => {
+    const { project } = await svc.createProject('边缘框选', 'presentation');
+    await svc.postRequirement(project.id, '做一份季度业务汇报，包含数据和对比分析');
+    const head = (await svc.getOverview(project.id)).revisions.at(-1)!;
+    const { boxes } = await svc.getBoxes(head.id, 2);
+    const t = boxes.find((b) => b.nodeId === 'slide-2-title') ?? boxes[0]!;
+    // Measure-mode-style overhang: the framed rect starts above the top edge.
+    const res = await svc.createAnnotation(project.id, {
+      page: 2,
+      rectNorm: { x: Math.max(0, t.x), y: -0.03, w: Math.max(0.02, t.w), h: (t.h || 0.1) + 0.03 },
+      viewport: { zoom: 1, rotation: 0, dpr: 1, pageWidthPx: 1280, pageHeightPx: 720 },
+      instruction: '改为「边缘框选已修复」',
+      directNodeId: t.nodeId,
+      revisionId: head.id,
+    });
+    // The out-of-range rect is clamped, so it resolves cleanly (no schema 500).
+    expect(res.annotation).toBeTruthy();
+    expect(res.revision).toBeTruthy();
+    expect(res.revision!.source.find((f) => f.path === 'slides.md')!.content).toContain('边缘框选已修复');
+  });
+
+  it('a free-form single rewrite still stays local (does not become a deck rename)', async () => {
+    const { project } = await svc.createProject('局部改写', 'presentation');
+    await svc.postRequirement(project.id, '做一份季度业务汇报，包含数据和对比分析');
+    const overview = await svc.getOverview(project.id);
+    const head = overview.revisions.at(-1)!;
+
+    const { boxes } = await svc.getBoxes(head.id, 2);
+    const target = boxes.find((b) => b.nodeId === 'slide-2-b0');
+    expect(target).toBeTruthy();
+    const rectNorm = { x: target!.x, y: target!.y, w: Math.max(0.02, target!.w), h: Math.max(0.02, target!.h) };
+
+    // Literal "改为「…」" is a local replaceText, never a deck-wide term swap.
+    const edited = await svc.createAnnotation(project.id, {
+      page: 2,
+      rectNorm,
+      instruction: '改为「仅此处的定点改写」',
+      viewport: { zoom: 1, rotation: 0, dpr: 1, pageWidthPx: 1280, pageHeightPx: 720 },
+      directNodeId: 'slide-2-b0',
+      revisionId: head.id,
+    });
+    expect(edited.revision).toBeTruthy();
+    expect(edited.revision!.patchSummary).not.toMatch(/deckTextReplace/);
+    const after = edited.revision!.source.find((f) => f.path === 'slides.md')!.content;
+    expect(after).toContain('仅此处的定点改写');
   });
 });

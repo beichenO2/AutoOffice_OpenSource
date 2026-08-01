@@ -51,6 +51,9 @@ export const api = {
   // ---- projects ----
   listProjects: () => request('/projects'),
   createProject: (name, kind) => request('/projects', { method: 'POST', body: { name, kind } }),
+  // one-click "topic → full editable deck" (optionally grounded by outline /
+  // guidance / chosen images; may allow LaTeX formulas)
+  generateDeck: (payload) => request('/decks', { method: 'POST', body: payload }),
   getOverview: (projectId) => request(`/projects/${encodeURIComponent(projectId)}/overview`),
 
   // ---- requirements / tasks ----
@@ -67,6 +70,10 @@ export const api = {
   postAnnotation: (projectId, payload) =>
     request(`/projects/${encodeURIComponent(projectId)}/annotations`, { method: 'POST', body: payload }),
 
+  // ---- insert / reference image ----
+  addImage: (projectId, payload) =>
+    request(`/projects/${encodeURIComponent(projectId)}/images`, { method: 'POST', body: payload }),
+
   // ---- proposals ----
   chooseProposal: (proposalId, optionId) =>
     request(`/proposals/${encodeURIComponent(proposalId)}/choose`, { method: 'POST', body: { optionId } }),
@@ -82,8 +89,8 @@ export const api = {
   getDiff: (revisionId) => request(`/revisions/${encodeURIComponent(revisionId)}/diff`),
 
   // ---- export ----
-  exportUrl: (projectId, format) =>
-    `${BASE}/projects/${encodeURIComponent(projectId)}/export?format=${encodeURIComponent(format)}`,
+  exportUrl: (projectId, format, clicks = false) =>
+    `${BASE}/projects/${encodeURIComponent(projectId)}/export?format=${encodeURIComponent(format)}${clicks ? '&clicks=1' : ''}`,
 
   // ---- standards ----
   getStandards: () => request('/standards/profiles'),

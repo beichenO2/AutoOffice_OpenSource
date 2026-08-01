@@ -10,6 +10,7 @@ const PORT = 39880;
 const CAPABILITY_PATH = join(import.meta.dirname, '..', 'coordination', 'capabilities', 'autooffice.report_gen.json');
 let serverProcess: ReturnType<typeof import('node:child_process').fork> | null = null;
 let apiWikiRoot = '';
+let engineHome = '';
 
 async function readPublishedCapabilityVersion(): Promise<string> {
   const raw = await readFile(CAPABILITY_PATH, 'utf-8');
@@ -37,6 +38,7 @@ function httpReq(method: string, path: string, body?: unknown): Promise<{ status
 describe('server — HTTP API', () => {
   beforeAll(async () => {
     apiWikiRoot = await mkdtemp(join(tmpdir(), 'autooffice-server-wiki-'));
+    engineHome = await mkdtemp(join(tmpdir(), 'autooffice-server-engine-'));
     const { fork } = await import('node:child_process');
     serverProcess = fork(join(import.meta.dirname, '..', 'dist', 'cli.js'), ['serve', '-p', String(PORT)], {
       stdio: 'pipe',
@@ -44,6 +46,11 @@ describe('server — HTTP API', () => {
         ...process.env,
         AUTOOFFICE_API_WIKI_ROOT: apiWikiRoot,
         AUTOOFFICE_DIRECT_PORT: '1',
+        // Isolate engine writes to a temp home; estimate boxmap keeps the deck
+        // route offline + Chromium-free for the HTTP contract test.
+        AUTOOFFICE_ENGINE_HOME: engineHome,
+        AUTOOFFICE_PPT_SOT: 'slidev',
+        AUTOOFFICE_BOXMAP: 'estimate',
       },
     });
     await new Promise<void>((resolve) => {
@@ -60,6 +67,9 @@ describe('server — HTTP API', () => {
     serverProcess?.kill();
     if (apiWikiRoot) {
       await rm(apiWikiRoot, { recursive: true, force: true });
+    }
+    if (engineHome) {
+      await rm(engineHome, { recursive: true, force: true });
     }
   });
 
@@ -195,5 +205,26 @@ describe('server — HTTP API', () => {
     expect(res.status).toBe(400);
     const data = JSON.parse(res.body);
     expect(data.error).toContain('relative path');
+  });
+
+  it('engine deck endpoint generates an editable deck from a topic (#1 一键生成)', async () => {
+    const res = await httpReq('POST', '/api/engine/decks', {
+      topic: '量子计算 2026 进展',
+      research: '纠错取得进展\n超导与离子阱两条路线\n2026 出现千比特原型机',
+    });
+    expect(res.status).toBe(201);
+    const data = JSON.parse(res.body);
+    expect(data.ok).toBe(true);
+    expect(data.project.kind).toBe('presentation');
+    expect(data.slides).toBeGreaterThanOrEqual(2);
+    expect(data.revision).toBeTruthy();
+    expect(data.grounding).toBeTruthy(); // #4 data-rigor report is always returned
+  });
+
+  it('engine deck endpoint rejects a missing topic', async () => {
+    const res = await httpReq('POST', '/api/engine/decks', { research: 'no topic here' });
+    expect(res.status).toBe(400);
+    const data = JSON.parse(res.body);
+    expect(data.error.code).toBe('invalid_topic');
   });
 });

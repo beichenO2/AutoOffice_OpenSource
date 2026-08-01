@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>GLP-1 类药物的药理与临床证据</title>
+<style>
+:root{--ao-ink:#141821;--ao-muted:#5b6472;--ao-accent:#3b6ef5;--ao-bg:#ffffff;}
+*{box-sizing:border-box;}
+body{margin:0;font-family:-apple-system,"Segoe UI","PingFang SC",Roboto,sans-serif;color:var(--ao-ink);background:#eef1f6;}
+.ao-slide{position:relative;width:1280px;height:720px;margin:0 auto 24px;background:var(--ao-bg);
+  padding:64px 72px;overflow:hidden;box-shadow:0 8px 30px rgba(20,24,33,.10);}
+.ao-slide[data-ao-layout="title"]{display:flex;flex-direction:column;justify-content:center;}
+.ao-el{outline:none;}
+h1.ao-el{font-size:52px;line-height:1.15;margin:0 0 16px;font-weight:700;}
+h2.ao-el{font-size:34px;line-height:1.2;margin:0 0 20px;font-weight:650;color:var(--ao-accent);}
+p.ao-el{font-size:24px;line-height:1.5;margin:0 0 14px;color:var(--ao-muted);}
+ul.ao-el{margin:0;padding-left:28px;}
+li.ao-el{font-size:26px;line-height:1.55;margin:0 0 12px;}
+img.ao-el{max-width:100%;border-radius:12px;}
+[data-ao-formula]{margin:16px 0;text-align:center;overflow-x:auto;color:var(--ao-ink);}
+[data-ao-formula] math{font-size:1.35em;}
+html,body{margin:0;overflow-x:hidden;}
+body[data-ao-deck]{
+  background:#e9edf4;
+  font-family:"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",system-ui,-apple-system,"Segoe UI",sans-serif;
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+  counter-reset:aopage aosec;
+  /* Theme accent tokens — a deck is a themed system, so every accent is driven
+     by these vars. Defaults reproduce the original hard-coded palette exactly;
+     the preview overrides --ao-accent (+ derived) from the slides.md aoAccent
+     frontmatter to recolor the whole deck consistently (the #4 PPT skill). */
+  --ao-accent:#3a63e8;
+  --ao-accent-lite:#6f93f7;
+  --ao-accent-lite2:#7ea0ff;
+  --ao-accent-cover:#9ab4ff;
+  --ao-cover-1:#0d1526;
+  --ao-cover-2:#172a54;
+  --ao-cover-3:#21407e;
+}
+.ao-slide{
+  position:relative;width:100vw;height:56.25vw;margin:0 auto 2.6vw;
+  padding:6.6vw 7.4vw 6.4vw;background:#fbfcfe;color:#1b2233;overflow:hidden;
+  display:flex;flex-direction:column;
+  box-shadow:0 1.6vw 3.6vw rgba(20,28,56,.14), 0 .3vw .8vw rgba(20,28,56,.07);
+}
+.ao-el{outline:none;}
+/* two independent counters: aopage over every slide, aosec over content only,
+   so the footer page number and the frame-title eyebrow number stay honest for
+   any deck length (no hardcoded slide count). Mutually-exclusive layout rules
+   keep counter-increment from clobbering itself. */
+.ao-slide[data-ao-layout="title"]{counter-increment:aopage;}
+.ao-slide:not([data-ao-layout="title"]){counter-increment:aopage aosec;}
+/* slim accent tab at the foot — the one Metropolis flourish (single signature) */
+.ao-slide::after{content:"";position:absolute;left:0;bottom:0;height:.5vw;width:14vw;
+  background:linear-gradient(90deg,var(--ao-accent),var(--ao-accent-lite));border-top-right-radius:.5vw;}
+/* real page number, bottom-right, on content slides (cover stays uncluttered) */
+.ao-slide:not([data-ao-layout="title"])::before{
+  content:counter(aopage,decimal-leading-zero);position:absolute;right:7.4vw;bottom:3vw;
+  font-size:1.5vw;font-weight:600;letter-spacing:.14em;color:#aab3c6;
+  font-variant-numeric:tabular-nums;}
+
+/* ---- cover / title slide: deep branded background with layered depth ---- */
+.ao-slide[data-ao-layout="title"]{justify-content:center;padding:6.6vw 8vw;color:#f4f7ff;
+  background:
+    radial-gradient(120% 130% at 82% 8%, rgba(122,154,252,.30), rgba(122,154,252,0) 46%),
+    radial-gradient(100% 120% at 0% 106%, rgba(46,74,140,.55), rgba(46,74,140,0) 52%),
+    linear-gradient(135deg,var(--ao-cover-1) 0%,var(--ao-cover-2) 58%,var(--ao-cover-3) 100%);}
+.ao-slide[data-ao-layout="title"] h1.ao-el{
+  font-size:6.2vw;line-height:1.05;font-weight:800;letter-spacing:-.025em;color:#ffffff;
+  max-width:92%;text-wrap:balance;margin:0;
+  text-shadow:0 .3vw 1.6vw rgba(6,12,28,.35);}
+.ao-slide[data-ao-layout="title"] h1.ao-el::before{content:"";display:block;
+  width:7.5vw;height:.6vw;border-radius:1vw;background:linear-gradient(90deg,var(--ao-accent-lite),var(--ao-accent-cover));margin-bottom:2.8vw;
+  box-shadow:0 .3vw 1.2vw color-mix(in srgb,var(--ao-accent-lite) 50%,transparent);}
+.ao-slide[data-ao-layout="title"] p.ao-el{color:#b7c4e6;font-size:2.15vw;line-height:1.55;
+  margin:2.6vw 0 0;max-width:84%;}
+
+/* ---- content frame title: heading over a hairline rule with an accent tick ---- */
+.ao-slide:not([data-ao-layout="title"]) > h1.ao-el{
+  font-size:3.5vw;line-height:1.15;font-weight:750;letter-spacing:-.01em;color:#141b2e;
+  margin:0 0 3.2vw;padding-bottom:1.5vw;position:relative;text-wrap:balance;
+  border-bottom:.16vw solid #dce1ec;}
+/* editorial eyebrow: two-digit section index above the title (accent, tracked) */
+.ao-slide:not([data-ao-layout="title"]) > h1.ao-el::before{
+  content:counter(aosec,decimal-leading-zero);display:block;
+  font-size:1.35vw;font-weight:700;letter-spacing:.28em;color:var(--ao-accent);
+  margin:0 0 1.1vw;font-variant-numeric:tabular-nums;}
+.ao-slide:not([data-ao-layout="title"]) > h1.ao-el::after{content:"";position:absolute;
+  left:0;bottom:-.16vw;width:6.5vw;height:.32vw;background:var(--ao-accent);}
+
+h2.ao-el{font-size:2.5vw;line-height:1.25;font-weight:650;margin:0 0 1.6vw;color:var(--ao-accent);}
+
+/* content lead paragraph → a tinted accent callout block that sets up the slide */
+.ao-slide:not([data-ao-layout="title"]) > p.ao-el{
+  font-size:2.1vw;line-height:1.7;margin:0 0 2.9vw;color:#37415a;max-width:92%;
+  padding:1.15vw 2.1vw;border-left:.34vw solid var(--ao-accent);border-radius:0 .8vw .8vw 0;
+  background:linear-gradient(90deg,color-mix(in srgb,var(--ao-accent) 8.5%,transparent),color-mix(in srgb,var(--ao-accent) 2%,transparent) 55%,transparent);
+  font-variant-numeric:tabular-nums;text-wrap:pretty;}
+p.ao-el[data-ao-note]{font-size:1.65vw;color:#6a7288;border:0;padding:0;background:none;}
+
+/* bullets: airy rows, crisp accent marker, comfortable reading measure */
+ul.ao-el{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:2.2vw;max-width:93%;}
+li.ao-el{position:relative;font-size:2.3vw;line-height:1.5;padding-left:3.8vw;
+  color:#212838;font-weight:500;font-variant-numeric:tabular-nums;}
+li.ao-el::before{content:"";position:absolute;left:.2vw;top:.52vw;width:1.32vw;height:1.32vw;
+  border-radius:.36vw;background:linear-gradient(135deg,var(--ao-accent),var(--ao-accent-lite2));
+  box-shadow:0 .22vw .5vw color-mix(in srgb,var(--ao-accent) 40%,transparent),inset 0 .06vw .14vw rgba(255,255,255,.55);}
+
+img.ao-el{max-width:100%;border-radius:1vw;box-shadow:0 1vw 2.4vw rgba(20,28,56,.18);}
+/* content-slide illustration: keep a framed "配图" tidy (no overflow) + selectable */
+.ao-slide:not([data-ao-layout="title"]) img.ao-el{max-width:70%;max-height:33vw;width:auto;
+  display:block;margin:1vw 0 0;}
+</style>
+</head>
+<body data-ao-deck="1">
+<div class="ao-slide" data-ao-id="slide-1" data-ao-type="slide" data-ao-page="1" data-ao-layout="title">
+<h1 data-ao-id="slide-1-title" data-ao-type="heading" class="ao-el">GLP-1 类药物的药理与临床证据</h1>
+<p data-ao-id="slide-1-sub" data-ao-type="paragraph" class="ao-el">从减重疗效到心血管获益：基于最新临床数据的深度解析</p>
+</div>
+<div class="ao-slide" data-ao-id="slide-2" data-ao-type="slide" data-ao-page="2" data-ao-layout="content">
+<h1 data-ao-id="slide-2-title" data-ao-type="heading" class="ao-el">GLP-1 类药物与 BMI 基础评估</h1>
+<div data-ao-id="slide-2-f0" data-ao-type="formula" class="ao-el" data-ao-formula="1"><span class="katex"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>B</mi><mi>M</mi><mi>I</mi><mo>=</mo><mfrac><mrow><mi>W</mi><mi>e</mi><mi>i</mi><mi>g</mi><mi>h</mi><mi>t</mi><mo stretchy="false">(</mo><mi>k</mi><mi>g</mi><mo stretchy="false">)</mo></mrow><mrow><mi>H</mi><mi>e</mi><mi>i</mi><mi>g</mi><mi>h</mi><mi>t</mi><mo stretchy="false">(</mo><mi>m</mi><msup><mo stretchy="false">)</mo><mn>2</mn></msup></mrow></mfrac></mrow><annotation encoding="application/x-tex">BMI = \frac{Weight(kg)}{Height(m)^2}</annotation></semantics></math></span></div>
+<ul data-ao-id="slide-2-bullets" data-ao-type="list" class="ao-el">
+<li data-ao-id="slide-2-b0" data-ao-type="bullet" class="ao-el">GLP-1（胰高血糖素样肽-1）受体激动剂通过调节食欲与胃排空实现体重管理</li>
+<li data-ao-id="slide-2-b1" data-ao-type="bullet" class="ao-el">临床用药前需准确评估患者肥胖程度，BMI 是核心指标</li>
+<li data-ao-id="slide-2-b2" data-ao-type="bullet" class="ao-el">BMI 计算公式为体重（公斤）除以身高（米）的平方</li>
+</ul>
+</div>
+<div class="ao-slide" data-ao-id="slide-3" data-ao-type="slide" data-ao-page="3" data-ao-layout="content">
+<h1 data-ao-id="slide-3-title" data-ao-type="heading" class="ao-el">司美格鲁肽：心血管获益与口服剂型新突破</h1>
+<ul data-ao-id="slide-3-bullets" data-ao-type="list" class="ao-el">
+<li data-ao-id="slide-3-b0" data-ao-type="bullet" class="ao-el">SELECT 试验证实司美格鲁肽具有明确的心血管获益证据</li>
+<li data-ao-id="slide-3-b1" data-ao-type="bullet" class="ao-el">OASIS-4 临床数据显示，口服片剂形式展现出优异的减重效果</li>
+<li data-ao-id="slide-3-b2" data-ao-type="bullet" class="ao-el">Wegovy 口服片在 OASIS-4 试验中实现平均减重 16.6~17%</li>
+<li data-ao-id="slide-3-b3" data-ao-type="bullet" class="ao-el">口服剂型为患者提供了相比注射剂更具依从性的治疗选择</li>
+</ul>
+</div>
+<div class="ao-slide" data-ao-id="slide-4" data-ao-type="slide" data-ao-page="4" data-ao-layout="content">
+<h1 data-ao-id="slide-4-title" data-ao-type="heading" class="ao-el">替尔泊肽：减重疗效的对比优势</h1>
+<ul data-ao-id="slide-4-bullets" data-ao-type="list" class="ao-el">
+<li data-ao-id="slide-4-b0" data-ao-type="bullet" class="ao-el">临床证据表明，替尔泊肽在减重效果上优于司美格鲁肽</li>
+<li data-ao-id="slide-4-b1" data-ao-type="bullet" class="ao-el">替尔泊肽为注射剂型，通过双重受体激动机制发挥作用</li>
+<li data-ao-id="slide-4-b2" data-ao-type="bullet" class="ao-el">尽管减重数据领先，但给药方式限制了其在部分患者群体中的使用便利性</li>
+</ul>
+</div>
+<div class="ao-slide" data-ao-id="slide-5" data-ao-type="slide" data-ao-page="5" data-ao-layout="content">
+<h1 data-ao-id="slide-5-title" data-ao-type="heading" class="ao-el">不同 GLP-1 药物临床证据对比</h1>
+<ul data-ao-id="slide-5-bullets" data-ao-type="list" class="ao-el">
+<li data-ao-id="slide-5-b0" data-ao-type="bullet" class="ao-el">Wegovy 口服片：OASIS-4 试验平均减重 16.6~17%，依从性优势显著</li>
+<li data-ao-id="slide-5-b1" data-ao-type="bullet" class="ao-el">司美格鲁肽：具备 SELECT 试验心血管获益证据，兼顾减重与心管保护</li>
+<li data-ao-id="slide-5-b2" data-ao-type="bullet" class="ao-el">替尔泊肽：减重疗效优于司美格鲁肽，但受限于注射给药方式</li>
+<li data-ao-id="slide-5-b3" data-ao-type="bullet" class="ao-el">临床选择需综合考量患者减重目标、心血管风险及用药偏好</li>
+</ul>
+</div>
+<div class="ao-slide" data-ao-id="slide-6" data-ao-type="slide" data-ao-page="6" data-ao-layout="content">
+<h1 data-ao-id="slide-6-title" data-ao-type="heading" class="ao-el">临床应用启示与总结</h1>
+<p data-ao-id="slide-6-p0" data-ao-type="paragraph" class="ao-el">基于现有临床证据，GLP-1 类药物在体重管理领域展现出显著疗效。Wegovy 口服片以 16.6~17% 的减重表现及给药便利性，有望提升长期治疗依从性；司美格鲁肽凭借 SELECT 试验的心血管获益，为合并心血管风险的患者提供了额外保护；替尔泊肽虽在减重绝对值上占优，但注射剂型可能影响部分患者选择。临床实践中应依据患者个体情况、BMI 水平及合并症，制定精准的 GLP-1 药物治疗策略。</p>
+</div>
+</body>
+</html>

@@ -81,11 +81,36 @@ export function initCenter(handlers = {}) {
     exportBtn.setAttribute('aria-expanded', String(open));
   });
   exportList?.addEventListener('click', (e) => {
-    const fmt = e.target.closest('[data-export]')?.dataset.export;
-    if (fmt) { handlers.onExport?.(fmt); closeMenu(); }
+    const item = e.target.closest('[data-export]');
+    if (item) { handlers.onExport?.(item.dataset.export, item.dataset.clicks === '1'); closeMenu(); }
   });
-  document.addEventListener('click', (e) => { if (!e.target.closest('.ao-menu-wrap')) closeMenu(); });
+  document.addEventListener('click', (e) => { if (!e.target.closest('#export-menu, #export-list')) closeMenu(); });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
+
+  // insert / reference image (popover + hidden file input)
+  const insertBtn = $('#insert-image');
+  const insertList = $('#insert-list');
+  const insertFile = $('#insert-file');
+  function closeInsert() { insertList?.classList.remove('is-open'); insertBtn?.setAttribute('aria-expanded', 'false'); }
+  insertBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const open = insertList.classList.toggle('is-open');
+    insertBtn.setAttribute('aria-expanded', String(open));
+  });
+  insertList?.addEventListener('click', (e) => {
+    const kind = e.target.closest('[data-insert]')?.dataset.insert;
+    if (!kind) return;
+    closeInsert();
+    if (kind === 'file') { insertFile.value = ''; insertFile.click(); return; }
+    handlers.onInsertImage?.(kind);
+  });
+  insertFile?.addEventListener('change', () => {
+    const file = insertFile.files?.[0];
+    if (file) handlers.onInsertImage?.('file', file);
+    insertFile.value = '';
+  });
+  document.addEventListener('click', (e) => { if (!e.target.closest('#insert-image-wrap')) closeInsert(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeInsert(); });
 
   // retry render / close compare (delegated)
   $('#retry-render')?.addEventListener('click', () => handlers.onRetry?.());
@@ -95,5 +120,5 @@ export function initCenter(handlers = {}) {
 
   applyZoom();
 
-  return { setState, setMode, setDoc, setRenderStatus, setZoom, showCompare: (on = true) => $('#compare-bar')?.classList.toggle('ao-hidden', !on), get annotating() { return s.annotating; } };
+  return { setState, setMode, setDoc, setRenderStatus, setZoom, showCompare: (on = true) => $('#compare-bar')?.classList.toggle('ao-hidden', !on), get annotating() { return s.annotating; }, get page() { return s.page; } };
 }

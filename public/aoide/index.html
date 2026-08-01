@@ -40,7 +40,10 @@
       <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
       <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 13 9 5 9-5"/></symbol>
       <symbol id="i-doc" viewBox="0 0 24 24"><path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Z"/></symbol>
+      <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.6"/><path d="m4 18 5-5 4 4 3-3 4 4"/></symbol>
       <symbol id="i-cancel" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></symbol>
+      <symbol id="i-sparkles" viewBox="0 0 24 24"><path d="M12 3l1.8 4.6L18.5 9l-4.7 1.4L12 15l-1.8-4.6L5.5 9l4.7-1.4L12 3Z" fill="currentColor" stroke="none"/><path d="M18 14l.9 2.2L21 17l-2.1.8L18 20l-.9-2.2L15 17l2.1-.8L18 14Z" fill="currentColor" stroke="none" opacity=".8"/></symbol>
+      <symbol id="i-sigma" viewBox="0 0 24 24"><path d="M17 5H7l6 7-6 7h10"/></symbol>
     </defs>
   </svg>
 
@@ -98,7 +101,10 @@
         <div class="ao-pane__header">
           <span class="ao-pane__title">工作台</span>
           <div class="ao-pane__spacer"></div>
-          <button class="ao-btn ao-btn--ghost" id="new-project" title="新建文档">
+          <button class="ao-btn ao-btn--primary" id="generate-deck" data-testid="generate-deck" title="输入主题，一键生成完整可编辑幻灯片">
+            <svg class="ao-icon ao-icon--sm"><use href="#i-sparkles"/></svg>一键生成
+          </button>
+          <button class="ao-btn ao-btn--ghost" id="new-project" title="新建空白文档">
             <svg class="ao-icon ao-icon--sm"><use href="#i-plus"/></svg>新建
           </button>
         </div>
@@ -174,6 +180,19 @@
           <svg class="ao-icon"><use href="#i-marquee"/></svg>
         </button>
 
+        <div class="ao-menu-wrap" id="insert-image-wrap">
+          <button class="ao-icon-btn" data-testid="insert-image" id="insert-image"
+                  aria-haspopup="menu" aria-expanded="false" aria-label="插入图片" title="插入 / 引用图片">
+            <svg class="ao-icon"><use href="#i-image"/></svg>
+          </button>
+          <div class="ao-menu ao-glass--strong" id="insert-list" role="menu" aria-label="插入图片">
+            <button class="ao-menu__item" role="menuitem" data-insert="file"><svg class="ao-icon ao-icon--sm"><use href="#i-download"/></svg>从文件上传…</button>
+            <button class="ao-menu__item" role="menuitem" data-insert="url"><svg class="ao-icon ao-icon--sm"><use href="#i-image"/></svg>引用图片链接…</button>
+            <button class="ao-menu__item" role="menuitem" data-insert="card"><svg class="ao-icon ao-icon--sm"><use href="#i-layers"/></svg>生成色卡占位图</button>
+          </div>
+          <input type="file" id="insert-file" accept="image/*" hidden aria-hidden="true" />
+        </div>
+
         <div class="ao-topbar__spacer"></div>
 
         <div class="ao-render-status is-rendered" data-testid="render-status" id="render-status" aria-live="polite">
@@ -188,6 +207,8 @@
             <button class="ao-menu__item" role="menuitem" data-export="html"><svg class="ao-icon ao-icon--sm"><use href="#i-doc"/></svg>导出 HTML</button>
             <button class="ao-menu__item" role="menuitem" data-export="pdf"><svg class="ao-icon ao-icon--sm"><use href="#i-file-pdf"/></svg>导出 PDF</button>
             <button class="ao-menu__item" role="menuitem" data-export="pptx"><svg class="ao-icon ao-icon--sm"><use href="#i-file-ppt"/></svg>导出 PPTX</button>
+            <button class="ao-menu__item" role="menuitem" data-export="pdf" data-clicks="1"><svg class="ao-icon ao-icon--sm"><use href="#i-file-pdf"/></svg>导出 PDF · 分步动画</button>
+            <button class="ao-menu__item" role="menuitem" data-export="pptx" data-clicks="1"><svg class="ao-icon ao-icon--sm"><use href="#i-file-ppt"/></svg>导出 PPTX · 分步动画</button>
           </div>
         </div>
       </div>
@@ -243,11 +264,14 @@
         <div class="ao-empty" id="center-empty" data-testid="center-empty">
           <div class="ao-empty__art"><svg class="ao-icon" style="width:26px;height:26px"><use href="#i-wand"/></svg></div>
           <div class="ao-empty__title">告诉我你想做什么样的文档</div>
-          <p class="ao-empty__text">用大白话描述需求，我来生成真实可编辑的 PDF 或幻灯片。你随时可以框选不满意的地方，让我定点修改。</p>
+          <p class="ao-empty__text">输入一个主题即可一键生成完整、可编辑的幻灯片；也可给定大纲、权威资料与选好的插图，做更严谨的定制生成。生成后随时框选不满意处让我定点修改。</p>
+          <button class="ao-btn ao-btn--primary ao-btn--lg" id="empty-generate" data-testid="empty-generate">
+            <svg class="ao-icon ao-icon--sm"><use href="#i-sparkles"/></svg>输入主题一键生成
+          </button>
           <div class="ao-chips">
-            <button class="ao-chip-suggest" data-example="做一份8页的季度业务回顾PDF">季度业务回顾（PDF）</button>
-            <button class="ao-chip-suggest" data-example="做一套12页的产品发布会幻灯片">产品发布会（PPT）</button>
-            <button class="ao-chip-suggest" data-example="做一份单页招聘海报">招聘海报（单页）</button>
+            <button class="ao-chip-suggest" data-topic="Transformer 架构综述">Transformer 架构综述</button>
+            <button class="ao-chip-suggest" data-topic="梯度下降与反向传播">梯度下降与反向传播</button>
+            <button class="ao-chip-suggest" data-topic="GLP-1 类药物药理与临床证据">GLP-1 药理与临床</button>
           </div>
         </div>
 
@@ -322,6 +346,64 @@
     </aside>
 
     <div class="ao-scrim" data-action="close-drawers" aria-hidden="true"></div>
+  </div>
+
+  <!-- ============ GENERATE-FROM-TOPIC MODAL ============ -->
+  <div class="ao-modal ao-hidden" id="generate-modal" data-testid="generate-modal" role="dialog"
+       aria-modal="true" aria-labelledby="gen-modal-title">
+    <div class="ao-modal__scrim" data-gen-close></div>
+    <div class="ao-modal__panel ao-glass--strong" role="document">
+      <div class="ao-modal__head">
+        <span class="ao-modal__title" id="gen-modal-title">
+          <svg class="ao-icon ao-icon--sm" style="vertical-align:-3px"><use href="#i-sparkles"/></svg>
+          输入主题，一键生成幻灯片
+        </span>
+        <button class="ao-icon-btn" id="gen-close" data-gen-close aria-label="关闭"><svg class="ao-icon"><use href="#i-x"/></svg></button>
+      </div>
+      <div class="ao-modal__body">
+        <div class="ao-group">
+          <label class="ao-field-label" for="gen-topic">主题 <span style="color:var(--ao-danger,#e5484d)">*</span></label>
+          <textarea class="ao-textarea" id="gen-topic" data-testid="gen-topic" rows="2"
+                    placeholder="例如：傅里叶变换与卷积定理"></textarea>
+        </div>
+
+        <details class="ao-disclosure ao-gen-adv">
+          <summary><svg class="ao-icon ao-icon--sm"><use href="#i-chevron-right"/></svg>定制生成（大纲 / 权威资料 / 插图 / 公式）</summary>
+          <div class="ao-gen-adv__body">
+            <div class="ao-group">
+              <label class="ao-field-label" for="gen-outline">大纲（可选，将严格遵循页面顺序与主题）</label>
+              <textarea class="ao-textarea" id="gen-outline" rows="3"
+                        placeholder="1. 封面&#10;2. 定义与直觉&#10;3. 变换公式（含公式）&#10;4. 卷积定理&#10;5. 应用"></textarea>
+            </div>
+            <div class="ao-group">
+              <label class="ao-field-label" for="gen-guidance">权威资料 / 指导（可选，数据须忠于此，不得杜撰）</label>
+              <textarea class="ao-textarea" id="gen-guidance" rows="3"
+                        placeholder="粘贴可信来源的关键事实、数字、结论；生成内容中的具体数据会据此校验严谨性。"></textarea>
+            </div>
+            <div class="ao-group">
+              <label class="ao-field-label" for="gen-image">选好的插图链接（可选，一行一个；可用「N: 链接」定位到第 N 页）</label>
+              <textarea class="ao-textarea" id="gen-image" rows="2"
+                        placeholder="2: https://example.com/fig1.png&#10;https://example.com/fig2.png"></textarea>
+            </div>
+            <div class="ao-gen-adv__row">
+              <label class="ao-checkbox"><input type="checkbox" id="gen-formulas" data-testid="gen-formulas" /> 允许 LaTeX 公式（渲染为 MathML）</label>
+              <label class="ao-checkbox"><input type="checkbox" id="gen-animate" data-testid="gen-animate" /> 加入动画（过渡 + 逐步揭示）</label>
+              <label class="ao-field-label" for="gen-slides" style="margin:0 0 0 auto">页数
+                <input class="ao-input ao-input--num" id="gen-slides" type="number" min="4" max="12" placeholder="自动" style="width:64px" />
+              </label>
+            </div>
+          </div>
+        </details>
+
+        <p class="ao-modal__hint" id="gen-hint">生成使用 AI（未开启 AI 时用确定性大纲兜底）。生成后可在中间框选任意文字 / 公式 / 插图定点修改。</p>
+      </div>
+      <div class="ao-modal__foot">
+        <button class="ao-btn ao-btn--ghost" data-gen-close>取消</button>
+        <button class="ao-btn ao-btn--primary" id="gen-submit" data-testid="gen-submit">
+          <svg class="ao-icon ao-icon--sm"><use href="#i-sparkles"/></svg>生成
+        </button>
+      </div>
+    </div>
   </div>
 
   <div class="ao-toasts" id="toasts" aria-live="assertive" aria-atomic="true"></div>

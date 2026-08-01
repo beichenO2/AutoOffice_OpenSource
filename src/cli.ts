@@ -634,17 +634,80 @@ program
 
     const sdkPath = resolve(dirname(new URL(import.meta.url).pathname), '..', '..', 'PolarPort', 'dist', 'sdk', 'index.js');
     const { claimPort } = await import(sdkPath);
+    // Auxiliary managed services (Agent preview) register under their own
+    // service id so PolarProcess owns their lifecycle and PolarPort keeps their
+    // port reserved — the whole reason the preview URL no longer drifts.
+    const service = process.env.AUTOOFFICE_SERVICE_ID ?? 'autooffice';
+    const project = process.env.AUTOOFFICE_PROJECT ?? 'AutoOffice';
     const port = await claimPort({
-      service: 'autooffice',
-      project: 'AutoOffice',
+      service,
+      project,
       preferred: resolution.port,
       heartbeat: true,
     });
     if (port !== resolution.port) {
-      throw new Error(`PolarPort returned ${port}, but AutoOffice requires ${resolution.port}`);
+      throw new Error(`PolarPort returned ${port}, but ${service} requires ${resolution.port}`);
     }
 
     await startServer(port);
+  });
+
+program
+  .command('generate-deck')
+  .description('Generate a presentation deck from a topic (LLM when AUTOOFFICE_LLM_EDIT=1) into an engine home')
+  .requiredOption('--topic <text>', 'Presentation topic')
+  .option('--research <file>', 'File with research notes / bullets to ground the deck')
+  .option('--outline <file>', 'File with a slide outline to follow (structure is respected)')
+  .option('--guidance <file>', 'File with authoritative facts/guidance to ground the deck (data must be faithful)')
+  .option('--image <src...>', 'Pre-selected image src(s): data:image/… or http(s); optional "N:" prefix pins to slide N')
+  .option('--formulas', 'Allow LaTeX formulas (rendered as MathML) where relevant')
+  .option('--animate', 'Add slide transitions + step-reveal (Slidev v-click) for a dynamic deck')
+  .option('--name <name>', 'Project name (defaults to the topic)')
+  .option('--home <dir>', 'Engine home directory (persisted projects)', '.autooffice-app')
+  .option('--out <dir>', 'Also write the rendered preview (+ export) here')
+  .option('--export <format>', 'Also export the deck: pdf | pptx | html')
+  .action(async (opts) => {
+    process.env.AUTOOFFICE_PPT_SOT = process.env.AUTOOFFICE_PPT_SOT ?? 'slidev';
+    process.env.AUTOOFFICE_BOXMAP = process.env.AUTOOFFICE_BOXMAP ?? 'estimate';
+    const { EngineService } = await import('./engine/service.js');
+    const home = resolve(opts.home ?? '.autooffice-app');
+    const svc = new EngineService({ root: home });
+    const research = opts.research ? await readFile(resolve(opts.research), 'utf-8') : '';
+    const outline = opts.outline ? await readFile(resolve(opts.outline), 'utf-8') : undefined;
+    const guidance = opts.guidance ? await readFile(resolve(opts.guidance), 'utf-8') : undefined;
+    const images = Array.isArray(opts.image)
+      ? (opts.image as string[]).map((raw) => {
+          const m = /^(\d+):([\s\S]+)$/.exec(raw);
+          return m ? { slide: Number(m[1]), src: m[2]! } : { src: raw };
+        })
+      : undefined;
+    const name = String(opts.name ?? String(opts.topic).slice(0, 40));
+    const { project, revision, usedLlm, slides } = await svc.createDeckFromTopic(name, String(opts.topic), research, {
+      outline,
+      guidance,
+      images,
+      allowFormulas: !!opts.formulas,
+      animate: !!opts.animate,
+    });
+    console.log(`Generated deck "${project.name}" — ${slides} slides, llm=${usedLlm}`);
+    console.log(`  project=${project.id} rev=${revision.id}  home=${home}`);
+
+    if (opts.out) {
+      const outDir = resolve(opts.out);
+      await mkdir(outDir, { recursive: true });
+      const safe = project.name.replace(/[\\/:*?"<>|]/g, '_').slice(0, 60) || project.id;
+      const render = await svc.getRevisionRender(revision.id);
+      const htmlPath = resolve(outDir, `${safe}.html`);
+      await writeFile(htmlPath, render.buffer);
+      console.log(`  preview HTML: ${htmlPath} (${render.buffer.length} bytes)`);
+      if (opts.export) {
+        const fmt = String(opts.export).toLowerCase();
+        const exp = await svc.exportProject(project.id, fmt === 'pptx' ? 'pptx' : fmt === 'html' ? 'html' : 'pdf');
+        const extPath = resolve(outDir, exp.filename.replace(/[\\/:*?"<>|]/g, '_'));
+        await writeFile(extPath, exp.buffer);
+        console.log(`  export ${fmt}: ${extPath} (${exp.buffer.length} bytes)`);
+      }
+    }
   });
 
 await program.parseAsync(process.argv).catch(async (err: unknown) => {

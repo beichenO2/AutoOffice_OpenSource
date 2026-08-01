@@ -3,6 +3,7 @@
   "version": "0.4.0",
   "private": false,
   "type": "module",
+  "main": "electron/main.cjs",
   "bin": {
     "autooffice": "./dist/cli.js"
   },
@@ -16,11 +17,15 @@
     "test:visual-states": "vitest run tests/engine/visual-states.test.ts",
     "test:visual-states:update": "AUTOOFFICE_VISUAL_UPDATE=1 vitest run tests/engine/visual-states.test.ts",
     "serve": "node dist/cli.js serve --port ${PORT:-3900}",
-    "start": "node dist/cli.js"
+    "start": "node dist/cli.js",
+    "app": "npm run build && electron electron/main.cjs",
+    "app:pack": "npm run build && electron-builder --dir",
+    "app:dist": "npm run build && electron-builder"
   },
   "dependencies": {
     "@resvg/resvg-js": "^2.6.2",
     "@slidev/cli": "52.15.2",
+    "@slidev/theme-default": "^0.25.0",
     "commander": "^14.0.3",
     "docx": "^9.7.1",
     "dompurify": "^3.4.12",
@@ -41,7 +46,30 @@
     "@types/svgdom": "^0.1.2",
     "@vitest/coverage-v8": "^2.1.9",
     "ajv": "^8.20.0",
+    "electron": "^43.2.0",
+    "electron-builder": "^26.15.3",
     "typescript": "^5.7.0",
     "vitest": "^2.1.0"
+  },
+  "build": {
+    "appId": "com.polarisor.autooffice",
+    "productName": "AutoOffice",
+    "directories": { "output": "release" },
+    "files": [
+      "electron/**/*",
+      "dist/**/*",
+      "public/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "**/node_modules/playwright-chromium/**",
+      "**/node_modules/playwright-core/**"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": ["dir", "dmg"]
+    },
+    "win": { "target": ["dir", "nsis"] },
+    "linux": { "target": ["dir", "AppImage"], "category": "Office" }
   }
 }

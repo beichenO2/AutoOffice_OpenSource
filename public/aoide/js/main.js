@@ -16,6 +16,7 @@ import { initChat } from './ui/chat.js';
 import { initLeft } from './ui/left.js';
 import { initRender } from './ui/render.js';
 import { initAnnotate } from './ui/annotate.js';
+import { initGenerate } from './ui/generate.js';
 import { toast } from './ui/components.js';
 import { api, ApiError } from './api.js';
 import * as demo from './demo.js';
@@ -34,10 +35,11 @@ const center = initCenter({
   onExport: (fmt) => onExport(fmt),
   onAnnotateToggle: (on) => {
     annotate.setEnabled(on);
-    toast(on ? '框选批注已开启：在文档上圈出想改的地方' : '框选批注已关闭');
+    toast(on ? '批注已开启：点击高亮的组件即可选中，或拖拽框选' : '批注已关闭');
   },
   onRetry: () => retryRender(),
   onFit: () => {},
+  onInsertImage: (kind, file) => insertImage(kind, file),
 });
 
 render.onStatusChange((st) => {
@@ -62,6 +64,8 @@ const left = initLeft({
   onSelectTask: (t) => toast(`打开任务：${t.title || t.goal}`),
   onRestore: (rev) => onRestore(rev),
 });
+
+initGenerate({ onGenerate: (payload) => generateDeck(payload) });
 
 // example chips in the center empty state prefill the composer
 document.addEventListener('click', (e) => {
@@ -183,6 +187,46 @@ async function showRevision(revisionId, kind) {
   }
 }
 
+/** Insert / reference an image into the current slide, then reload the deck. */
+async function insertImage(kind, file) {
+  if (DEMO) { toast('演示模式：插入图片'); return; }
+  if (!state.projectId) return toast('请先打开一个文档', 'error');
+  if (state.project?.kind !== 'presentation') return toast('插入图片目前仅支持演示文稿（Slidev）', 'error');
+  const page = center.page || 1;
+  // If a component is currently selected, drop the image right after it.
+  const afterNodeId = annotate.pending?.top?.nodeId;
+  const payload = { page, ...(afterNodeId ? { afterNodeId } : {}) };
+  try {
+    if (kind === 'file') {
+      if (!file) return;
+      if (file.size > 3_500_000) return toast('图片过大（>3.5MB），请压缩后再插入', 'error');
+      payload.src = await new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(String(r.result || ''));
+        r.onerror = () => reject(new Error('读取图片失败'));
+        r.readAsDataURL(file);
+      });
+      payload.alt = file.name;
+    } else if (kind === 'url') {
+      const url = prompt('粘贴图片链接（http/https 或 data:image/…）：', 'https://');
+      if (!url || !url.trim()) return;
+      payload.src = url.trim();
+      payload.alt = '引用图片';
+    } else {
+      payload.colorCard = { hex: '#4f63e6', label: '示意图' };
+      payload.alt = '示意图';
+    }
+    chat.setBusy?.(true, '插入图片');
+    await api.addImage(state.projectId, payload);
+    toast('已插入图片，可框选它换色 / 换图', 'success');
+    await selectProject(state.projectId);
+  } catch (e) {
+    toast(friendly(e), 'error');
+  } finally {
+    chat.setBusy?.(false);
+  }
+}
+
 /** Box selection + instruction → engine. Nothing is applied client-side. */
 async function submitAnnotation(payload) {
   if (!state.projectId) return toast('请先打开一个文档', 'error');
@@ -196,8 +240,19 @@ async function submitAnnotation(payload) {
       ...(state.revisionId ? { revisionId: state.revisionId } : {}),
       ...(payload.domNodeId ? { domNodeId: payload.domNodeId } : {}),
     });
-    if (res.revision) toast('已按框选定点修改并重新渲染', 'success');
-    else toast(res.annotation?.ambiguityReason || '已记录批注，但还不能安全地直接修改', 'error');
+    if (res.revision) {
+      // Surface the "PPT skill" scope so the user knows a palette change reached
+      // the whole deck (not just the framed slide) — that is the #4 ask.
+      const summary = res.revision.patchSummary || '';
+      const label = res.revision.label || '';
+      const deckWide = /^deckRecolor/.test(summary) || /^deck recolor/i.test(label);
+      toast(
+        deckWide
+          ? '懂 PPT · 配色是整册的：已统一更新全册主色与所有插图，可撤销'
+          : '已按框选定点修改并重新渲染',
+        'success',
+      );
+    } else toast(res.annotation?.ambiguityReason || '已记录批注，但还不能安全地直接修改', 'error');
     await selectProject(state.projectId);
   } catch (e) {
     toast(friendly(e), 'error');
@@ -228,6 +283,20 @@ async function onSend(text) {
       state.messages.push({ id: 'a' + Date.now(), role: 'agent', kind: 'text', content: '收到，我给你几种做法参考：' });
       chat.renderStream({ messages: state.messages, proposal: demo.demoProposal });
     }, 700);
+    return;
+  }
+  // A document already exists → do NOT regenerate from scratch (that would replace
+  // the current deck with a fresh draft and look like a "revert"). Point the user
+  // at box-select for precise, non-destructive edits instead.
+  if (state.project?.headRevisionId) {
+    state.messages.push({
+      id: 'a' + Date.now(),
+      role: 'agent',
+      kind: 'text',
+      content: '这份文档已经生成好了，直接聊天不会整篇重做（那样会覆盖当前版本）。想改哪里，请点顶部「框选修改」，在中间圈出那段文字或插图，直接说想怎么改——我会用 AI 定点修改、只动那一处，且随时可撤销。若确实想整篇重做，请点左上「新建」另起一个文档。',
+    });
+    chat.renderStream({ messages: state.messages });
+    toast('已有文档：请用「框选修改」定点修改，避免整篇重做', 'info');
     return;
   }
   try {
@@ -281,10 +350,10 @@ function retryRender() {
   if (state.projectId) selectProject(state.projectId);
 }
 
-function onExport(fmt) {
-  if (DEMO) { toast(`演示模式：导出 ${fmt.toUpperCase()}`); return; }
+function onExport(fmt, clicks = false) {
+  if (DEMO) { toast(`演示模式：导出 ${fmt.toUpperCase()}${clicks ? '（分步动画）' : ''}`); return; }
   if (!state.projectId) return toast('请先打开一个文档', 'error');
-  window.open(api.exportUrl(state.projectId, fmt), '_blank');
+  window.open(api.exportUrl(state.projectId, fmt, clicks), '_blank');
 }
 
 function onNewProject() {
@@ -293,6 +362,39 @@ function onNewProject() {
   if (!name) return;
   api.createProject(name, 'pdf').then((r) => { toast('已新建文档', 'success'); bootReal(); if (r?.project) selectProject(r.project.id); })
     .catch((e) => toast(friendly(e), 'error'));
+}
+
+/**
+ * #1 one-click "topic → full editable deck". Optionally grounded by outline /
+ * guidance / chosen images and may allow LaTeX formulas. After generation we open
+ * the new deck and surface the #4 data-rigor report so unverified numbers stand out.
+ */
+async function generateDeck(payload) {
+  if (DEMO) { toast('演示模式：一键生成幻灯片'); return true; }
+  center.setState('loading');
+  const steps = $('#loading-steps');
+  if (steps) steps.textContent = 'AI 正在起草幻灯片…';
+  try {
+    const res = await api.generateDeck(payload);
+    const { projects } = await api.listProjects();
+    left.renderProjects(projects, res.project.id);
+    await selectProject(res.project.id);
+    const g = res.grounding;
+    if (g && g.checked > 0 && g.flagged?.length) {
+      const pages = [...new Set(g.flagged.map((f) => f.slide))].join('、');
+      toast(`已生成 ${res.slides} 页。数据严谨校验：${g.grounded}/${g.checked} 处数字有出处，${g.flagged.length} 处未在资料中找到，请核对第 ${pages} 页`, 'error');
+    } else if (g && g.checked > 0) {
+      toast(`已生成 ${res.slides} 页。数据严谨校验通过：${g.checked} 处具体数字均能在资料中找到出处`, 'success');
+    } else {
+      toast(`已生成 ${res.slides} 页幻灯片${res.usedLlm ? '（AI）' : ''}，可框选任意文字 / 公式 / 插图定点修改`, 'success');
+    }
+    return true;
+  } catch (e) {
+    toast(friendly(e), 'error');
+    if (state.projectId) await selectProject(state.projectId);
+    else center.setState('empty');
+    return false;
+  }
 }
 
 // ---- launch ----

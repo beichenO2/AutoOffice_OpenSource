@@ -66,6 +66,49 @@ export function mountEngineRoutes(app: Express): void {
     res.status(201).json({ ok: true, ...(await svc.createProject(name.trim(), kind === 'presentation' ? 'presentation' : 'pdf')) });
   }));
 
+  // App entry: one-click "topic → full editable deck" (#1 button). Optionally
+  // grounded by an outline + authoritative guidance + pre-chosen images, and may
+  // allow LaTeX formulas (rendered as MathML). Returns the deck + a data-rigor
+  // grounding report so the UI can flag numbers with no source.
+  app.post(`${base}/decks`, asyncHandler(async (req, res) => {
+    const body = req.body as {
+      topic?: string;
+      name?: string;
+      research?: string;
+      outline?: string;
+      guidance?: string;
+      formulas?: boolean;
+      animate?: boolean;
+      slides?: number;
+      images?: { slide?: number; src: string; alt?: string }[];
+    };
+    if (!body?.topic?.trim()) {
+      jsonError(res, 400, 'invalid_topic', 'topic is required');
+      return;
+    }
+    const svc = getEngineService();
+    const images = Array.isArray(body.images)
+      ? body.images.filter((i) => i && typeof i.src === 'string' && i.src.trim()).slice(0, 12)
+      : undefined;
+    const slides = Number.isFinite(body.slides) ? Math.min(12, Math.max(4, Number(body.slides))) : undefined;
+    res.status(201).json({
+      ok: true,
+      ...(await svc.createDeckFromTopic(
+        String(body.name ?? body.topic).trim().slice(0, 60),
+        body.topic.trim(),
+        typeof body.research === 'string' ? body.research : '',
+        {
+          outline: typeof body.outline === 'string' ? body.outline : undefined,
+          guidance: typeof body.guidance === 'string' ? body.guidance : undefined,
+          allowFormulas: !!body.formulas,
+          animate: !!body.animate,
+          slides,
+          images,
+        },
+      )),
+    });
+  }));
+
   app.get(`${base}/projects/:id/overview`, asyncHandler(async (req, res) => {
     const svc = getEngineService();
     res.json({ ok: true, ...(await svc.getOverview(paramId(req.params.id))) });
@@ -91,6 +134,11 @@ export function mountEngineRoutes(app: Express): void {
   app.post(`${base}/projects/:id/annotations`, asyncHandler(async (req, res) => {
     const svc = getEngineService();
     res.status(201).json({ ok: true, ...(await svc.createAnnotation(paramId(req.params.id), req.body)) });
+  }));
+
+  app.post(`${base}/projects/:id/images`, asyncHandler(async (req, res) => {
+    const svc = getEngineService();
+    res.status(201).json({ ok: true, ...(await svc.addImageElement(paramId(req.params.id), req.body)) });
   }));
 
   app.post(`${base}/projects/:id/undo`, asyncHandler(async (req, res) => {
@@ -149,8 +197,10 @@ export function mountEngineRoutes(app: Express): void {
 
   app.get(`${base}/projects/:id/export`, asyncHandler(async (req, res) => {
     const format = String(req.query.format ?? 'pdf') as 'html' | 'pdf' | 'pptx';
+    // `?clicks=1` forces per-click-step export for animated decks (auto-on when the deck has v-click).
+    const withClicks = ['1', 'true', 'yes'].includes(String(req.query.clicks ?? '').toLowerCase());
     const svc = getEngineService();
-    const { buffer, mime, filename } = await svc.exportProject(paramId(req.params.id), format);
+    const { buffer, mime, filename } = await svc.exportProject(paramId(req.params.id), format, { withClicks });
     res.setHeader('Content-Type', mime);
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
     res.send(buffer);

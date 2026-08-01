@@ -66,3 +66,17 @@ export function buildReplaceTextIntent(
     operations: [{ op: 'replaceText', nodeId, payload: { text: newText } }],
   };
 }
+
+/** Scoped intent that sets attributes on one node (e.g. an editable image src). */
+export function buildSetAttrIntent(
+  base: Omit<EditIntent, 'operations' | 'allowedNodeIds'>,
+  nodeId: string,
+  attrs: Record<string, unknown>,
+): EditIntent {
+  return {
+    ...base,
+    targetNodeIds: [nodeId],
+    allowedNodeIds: [nodeId],
+    operations: [{ op: 'setAttr', nodeId, payload: { attrs } }],
+  };
+}

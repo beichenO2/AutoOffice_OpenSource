@@ -5,26 +5,34 @@
  *
  * Pure Node (no Python); generated prose is expected to be de-AI'd upstream.
  */
+import katex from 'katex';
 
 export interface SlideElementSpec {
   /** Local id (unique within slide); global id becomes `${slideId}-${id}`. */
   id: string;
-  type: 'heading' | 'subheading' | 'paragraph' | 'bullet' | 'image' | 'note';
+  type: 'heading' | 'subheading' | 'paragraph' | 'bullet' | 'image' | 'note' | 'formula';
+  /** For text/bullet/heading: the text. For formula: the LaTeX source. */
   text?: string;
   src?: string;
   alt?: string;
+  /** For formula: block (display) vs inline math. Defaults to block. */
+  display?: boolean;
 }
 
 export interface SlideSpec {
   title: string;
   layout?: 'title' | 'content' | 'section';
   elements: SlideElementSpec[];
+  /** S7: step-reveal body content (bullets/paragraphs/formulas) via Slidev v-click. */
+  reveal?: boolean;
 }
 
 export interface DeckSpec {
   title: string;
   theme?: string;
   slides: SlideSpec[];
+  /** S7: default slide-to-slide transition (Slidev headmatter, e.g. "slide-left", "fade"). */
+  transition?: string;
 }
 
 export function escapeHtml(s: string): string {
@@ -34,6 +42,49 @@ export function escapeHtml(s: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+/**
+ * Render a LaTeX formula to **MathML** (via KaTeX). MathML is rendered natively
+ * by the browser (Chromium/Safari/Firefox MathML Core) — no JS, no web fonts, no
+ * external CSS — so it displays correctly even inside the sandboxed, script-blocked
+ * self-contained preview iframe and survives export. Invalid LaTeX degrades to the
+ * escaped source rather than throwing.
+ */
+export function renderFormulaMathml(tex: string, display = true): string {
+  const src = tex ?? '';
+  try {
+    return katex.renderToString(src, {
+      displayMode: display,
+      output: 'mathml',
+      throwOnError: false,
+      strict: 'ignore',
+    });
+  } catch {
+    return escapeHtml(src);
+  }
+}
+
+/**
+ * Render a text run with inline `$…$` LaTeX rendered as inline MathML, the rest
+ * HTML-escaped. Lets formulas embedded in prose (bullets/paragraphs) — e.g.
+ * "半衰期 $t_{1/2}=\\frac{\\ln 2}{k_e}$" — typeset as math instead of showing raw
+ * LaTeX. Text with no `$` takes the plain escape path (unchanged behaviour).
+ */
+export function renderInlineText(raw: string): string {
+  const s = raw ?? '';
+  if (!s.includes('$')) return escapeHtml(s);
+  let out = '';
+  let last = 0;
+  const re = /\$([^$\n]+?)\$/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(s))) {
+    out += escapeHtml(s.slice(last, m.index));
+    out += renderFormulaMathml(m[1]!, false);
+    last = m.index + m[0].length;
+  }
+  out += escapeHtml(s.slice(last));
+  return out;
 }
 
 /** Deterministic default CSS — readable slides, no external assets. */
@@ -51,6 +102,8 @@ p.ao-el{font-size:24px;line-height:1.5;margin:0 0 14px;color:var(--ao-muted);}
 ul.ao-el{margin:0;padding-left:28px;}
 li.ao-el{font-size:26px;line-height:1.55;margin:0 0 12px;}
 img.ao-el{max-width:100%;border-radius:12px;}
+[data-ao-formula]{margin:16px 0;text-align:center;overflow-x:auto;color:var(--ao-ink);}
+[data-ao-formula] math{font-size:1.35em;}
 `.trim();
 
 function renderElement(slideId: string, el: SlideElementSpec): string {
@@ -58,17 +111,19 @@ function renderElement(slideId: string, el: SlideElementSpec): string {
   const idAttr = `data-ao-id="${escapeHtml(gid)}" data-ao-type="${el.type}" class="ao-el"`;
   switch (el.type) {
     case 'heading':
-      return `<h1 ${idAttr}>${escapeHtml(el.text ?? '')}</h1>`;
+      return `<h1 ${idAttr}>${renderInlineText(el.text ?? '')}</h1>`;
     case 'subheading':
-      return `<h2 ${idAttr}>${escapeHtml(el.text ?? '')}</h2>`;
+      return `<h2 ${idAttr}>${renderInlineText(el.text ?? '')}</h2>`;
     case 'paragraph':
-      return `<p ${idAttr}>${escapeHtml(el.text ?? '')}</p>`;
+      return `<p ${idAttr}>${renderInlineText(el.text ?? '')}</p>`;
     case 'note':
-      return `<p ${idAttr} data-ao-note="1">${escapeHtml(el.text ?? '')}</p>`;
+      return `<p ${idAttr} data-ao-note="1">${renderInlineText(el.text ?? '')}</p>`;
     case 'image':
       return `<img ${idAttr} src="${escapeHtml(el.src ?? '')}" alt="${escapeHtml(el.alt ?? '')}">`;
     case 'bullet':
-      return `<li ${idAttr}>${escapeHtml(el.text ?? '')}</li>`;
+      return `<li ${idAttr}>${renderInlineText(el.text ?? '')}</li>`;
+    case 'formula':
+      return `<div ${idAttr} data-ao-formula="1">${renderFormulaMathml(el.text ?? '', el.display !== false)}</div>`;
   }
 }
 

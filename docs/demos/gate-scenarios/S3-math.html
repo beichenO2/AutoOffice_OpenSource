@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>梯度下降与反向传播</title>
+<style>
+:root{--ao-ink:#141821;--ao-muted:#5b6472;--ao-accent:#3b6ef5;--ao-bg:#ffffff;}
+*{box-sizing:border-box;}
+body{margin:0;font-family:-apple-system,"Segoe UI","PingFang SC",Roboto,sans-serif;color:var(--ao-ink);background:#eef1f6;}
+.ao-slide{position:relative;width:1280px;height:720px;margin:0 auto 24px;background:var(--ao-bg);
+  padding:64px 72px;overflow:hidden;box-shadow:0 8px 30px rgba(20,24,33,.10);}
+.ao-slide[data-ao-layout="title"]{display:flex;flex-direction:column;justify-content:center;}
+.ao-el{outline:none;}
+h1.ao-el{font-size:52px;line-height:1.15;margin:0 0 16px;font-weight:700;}
+h2.ao-el{font-size:34px;line-height:1.2;margin:0 0 20px;font-weight:650;color:var(--ao-accent);}
+p.ao-el{font-size:24px;line-height:1.5;margin:0 0 14px;color:var(--ao-muted);}
+ul.ao-el{margin:0;padding-left:28px;}
+li.ao-el{font-size:26px;line-height:1.55;margin:0 0 12px;}
+img.ao-el{max-width:100%;border-radius:12px;}
+[data-ao-formula]{margin:16px 0;text-align:center;overflow-x:auto;color:var(--ao-ink);}
+[data-ao-formula] math{font-size:1.35em;}
+html,body{margin:0;overflow-x:hidden;}
+body[data-ao-deck]{
+  background:#e9edf4;
+  font-family:"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",system-ui,-apple-system,"Segoe UI",sans-serif;
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+  counter-reset:aopage aosec;
+  /* Theme accent tokens — a deck is a themed system, so every accent is driven
+     by these vars. Defaults reproduce the original hard-coded palette exactly;
+     the preview overrides --ao-accent (+ derived) from the slides.md aoAccent
+     frontmatter to recolor the whole deck consistently (the #4 PPT skill). */
+  --ao-accent:#3a63e8;
+  --ao-accent-lite:#6f93f7;
+  --ao-accent-lite2:#7ea0ff;
+  --ao-accent-cover:#9ab4ff;
+  --ao-cover-1:#0d1526;
+  --ao-cover-2:#172a54;
+  --ao-cover-3:#21407e;
+}
+.ao-slide{
+  position:relative;width:100vw;height:56.25vw;margin:0 auto 2.6vw;
+  padding:6.6vw 7.4vw 6.4vw;background:#fbfcfe;color:#1b2233;overflow:hidden;
+  display:flex;flex-direction:column;
+  box-shadow:0 1.6vw 3.6vw rgba(20,28,56,.14), 0 .3vw .8vw rgba(20,28,56,.07);
+}
+.ao-el{outline:none;}
+/* two independent counters: aopage over every slide, aosec over content only,
+   so the footer page number and the frame-title eyebrow number stay honest for
+   any deck length (no hardcoded slide count). Mutually-exclusive layout rules
+   keep counter-increment from clobbering itself. */
+.ao-slide[data-ao-layout="title"]{counter-increment:aopage;}
+.ao-slide:not([data-ao-layout="title"]){counter-increment:aopage aosec;}
+/* slim accent tab at the foot — the one Metropolis flourish (single signature) */
+.ao-slide::after{content:"";position:absolute;left:0;bottom:0;height:.5vw;width:14vw;
+  background:linear-gradient(90deg,var(--ao-accent),var(--ao-accent-lite));border-top-right-radius:.5vw;}
+/* real page number, bottom-right, on content slides (cover stays uncluttered) */
+.ao-slide:not([data-ao-layout="title"])::before{
+  content:counter(aopage,decimal-leading-zero);position:absolute;right:7.4vw;bottom:3vw;
+  font-size:1.5vw;font-weight:600;letter-spacing:.14em;color:#aab3c6;
+  font-variant-numeric:tabular-nums;}
+
+/* ---- cover / title slide: deep branded background with layered depth ---- */
+.ao-slide[data-ao-layout="title"]{justify-content:center;padding:6.6vw 8vw;color:#f4f7ff;
+  background:
+    radial-gradient(120% 130% at 82% 8%, rgba(122,154,252,.30), rgba(122,154,252,0) 46%),
+    radial-gradient(100% 120% at 0% 106%, rgba(46,74,140,.55), rgba(46,74,140,0) 52%),
+    linear-gradient(135deg,var(--ao-cover-1) 0%,var(--ao-cover-2) 58%,var(--ao-cover-3) 100%);}
+.ao-slide[data-ao-layout="title"] h1.ao-el{
+  font-size:6.2vw;line-height:1.05;font-weight:800;letter-spacing:-.025em;color:#ffffff;
+  max-width:92%;text-wrap:balance;margin:0;
+  text-shadow:0 .3vw 1.6vw rgba(6,12,28,.35);}
+.ao-slide[data-ao-layout="title"] h1.ao-el::before{content:"";display:block;
+  width:7.5vw;height:.6vw;border-radius:1vw;background:linear-gradient(90deg,var(--ao-accent-lite),var(--ao-accent-cover));margin-bottom:2.8vw;
+  box-shadow:0 .3vw 1.2vw color-mix(in srgb,var(--ao-accent-lite) 50%,transparent);}
+.ao-slide[data-ao-layout="title"] p.ao-el{color:#b7c4e6;font-size:2.15vw;line-height:1.55;
+  margin:2.6vw 0 0;max-width:84%;}
+
+/* ---- content frame title: heading over a hairline rule with an accent tick ---- */
+.ao-slide:not([data-ao-layout="title"]) > h1.ao-el{
+  font-size:3.5vw;line-height:1.15;font-weight:750;letter-spacing:-.01em;color:#141b2e;
+  margin:0 0 3.2vw;padding-bottom:1.5vw;position:relative;text-wrap:balance;
+  border-bottom:.16vw solid #dce1ec;}
+/* editorial eyebrow: two-digit section index above the title (accent, tracked) */
+.ao-slide:not([data-ao-layout="title"]) > h1.ao-el::before{
+  content:counter(aosec,decimal-leading-zero);display:block;
+  font-size:1.35vw;font-weight:700;letter-spacing:.28em;color:var(--ao-accent);
+  margin:0 0 1.1vw;font-variant-numeric:tabular-nums;}
+.ao-slide:not([data-ao-layout="title"]) > h1.ao-el::after{content:"";position:absolute;
+  left:0;bottom:-.16vw;width:6.5vw;height:.32vw;background:var(--ao-accent);}
+
+h2.ao-el{font-size:2.5vw;line-height:1.25;font-weight:650;margin:0 0 1.6vw;color:var(--ao-accent);}
+
+/* content lead paragraph → a tinted accent callout block that sets up the slide */
+.ao-slide:not([data-ao-layout="title"]) > p.ao-el{
+  font-size:2.1vw;line-height:1.7;margin:0 0 2.9vw;color:#37415a;max-width:92%;
+  padding:1.15vw 2.1vw;border-left:.34vw solid var(--ao-accent);border-radius:0 .8vw .8vw 0;
+  background:linear-gradient(90deg,color-mix(in srgb,var(--ao-accent) 8.5%,transparent),color-mix(in srgb,var(--ao-accent) 2%,transparent) 55%,transparent);
+  font-variant-numeric:tabular-nums;text-wrap:pretty;}
+p.ao-el[data-ao-note]{font-size:1.65vw;color:#6a7288;border:0;padding:0;background:none;}
+
+/* bullets: airy rows, crisp accent marker, comfortable reading measure */
+ul.ao-el{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:2.2vw;max-width:93%;}
+li.ao-el{position:relative;font-size:2.3vw;line-height:1.5;padding-left:3.8vw;
+  color:#212838;font-weight:500;font-variant-numeric:tabular-nums;}
+li.ao-el::before{content:"";position:absolute;left:.2vw;top:.52vw;width:1.32vw;height:1.32vw;
+  border-radius:.36vw;background:linear-gradient(135deg,var(--ao-accent),var(--ao-accent-lite2));
+  box-shadow:0 .22vw .5vw color-mix(in srgb,var(--ao-accent) 40%,transparent),inset 0 .06vw .14vw rgba(255,255,255,.55);}
+
+img.ao-el{max-width:100%;border-radius:1vw;box-shadow:0 1vw 2.4vw rgba(20,28,56,.18);}
+/* content-slide illustration: keep a framed "配图" tidy (no overflow) + selectable */
+.ao-slide:not([data-ao-layout="title"]) img.ao-el{max-width:70%;max-height:33vw;width:auto;
+  display:block;margin:1vw 0 0;}
+</style>
+</head>
+<body data-ao-deck="1">
+<div class="ao-slide" data-ao-id="slide-1" data-ao-type="slide" data-ao-page="1" data-ao-layout="title">
+<h1 data-ao-id="slide-1-title" data-ao-type="heading" class="ao-el">梯度下降与反向传播</h1>
+<p data-ao-id="slide-1-sub" data-ao-type="paragraph" class="ao-el">神经网络的优化核心与参数更新机制</p>
+</div>
+<div class="ao-slide" data-ao-id="slide-2" data-ao-type="slide" data-ao-page="2" data-ao-layout="content">
+<h1 data-ao-id="slide-2-title" data-ao-type="heading" class="ao-el">优化目标与梯度</h1>
+<p data-ao-id="slide-2-p5" data-ao-type="paragraph" class="ao-el">在机器学习与深度学习中，模型训练的本质是一个优化问题。通过定义合适的损失函数 L(w)，将模型参数 w 的学习转化为求解 argmin L(w) 的过程。梯度作为多元函数导数的推广，刻画了函数在局部的变化趋势，是引导参数向最优解移动的关键信号。</p>
+<ul data-ao-id="slide-2-bullets" data-ao-type="list" class="ao-el">
+<li data-ao-id="slide-2-b0" data-ao-type="bullet" class="ao-el">优化目标：寻找使损失函数 L(w) 最小化的参数 w</li>
+<li data-ao-id="slide-2-b1" data-ao-type="bullet" class="ao-el">损失函数 L(w) 衡量模型预测值与真实标签之间的误差</li>
+<li data-ao-id="slide-2-b2" data-ao-type="bullet" class="ao-el">梯度 ∇L(w) 是损失函数对参数的偏导数向量，指向损失上升最快的方向</li>
+<li data-ao-id="slide-2-b3" data-ao-type="bullet" class="ao-el">负梯度 -∇L(w) 则指向损失下降最快的方向，是参数更新的依据</li>
+<li data-ao-id="slide-2-b4" data-ao-type="bullet" class="ao-el">梯度的几何意义：在参数空间中表示损失函数最陡上升的方向，其模长反映变化的速率</li>
+</ul>
+</div>
+<div class="ao-slide" data-ao-id="slide-3" data-ao-type="slide" data-ao-page="3" data-ao-layout="content">
+<h1 data-ao-id="slide-3-title" data-ao-type="heading" class="ao-el">梯度下降更新规则</h1>
+<p data-ao-id="slide-3-p4" data-ao-type="paragraph" class="ao-el">梯度下降法是最经典的优化算法之一。其核心更新规则简洁明了：在每一步迭代中，计算当前参数下的梯度，沿其反方向移动一小段距离。这一过程反复进行，直到满足收敛条件（如梯度接近零或达到最大迭代次数）。</p>
+<div data-ao-id="slide-3-f0" data-ao-type="formula" class="ao-el" data-ao-formula="1"><span class="katex"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><msub><mi>w</mi><mrow><mi>t</mi><mo>+</mo><mn>1</mn></mrow></msub><mo>=</mo><msub><mi>w</mi><mi>t</mi></msub><mo>−</mo><mi>η</mi><mi mathvariant="normal">∇</mi><mi>L</mi><mo stretchy="false">(</mo><msub><mi>w</mi><mi>t</mi></msub><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">w_{t+1} = w_t - \eta \nabla L(w_t)</annotation></semantics></math></span></div>
+<ul data-ao-id="slide-3-bullets" data-ao-type="list" class="ao-el">
+<li data-ao-id="slide-3-b0" data-ao-type="bullet" class="ao-el">基本思想：沿负梯度方向迭代更新参数，逐步逼近损失函数的极小值</li>
+<li data-ao-id="slide-3-b1" data-ao-type="bullet" class="ao-el">学习率 η 控制每次更新的步长，决定了算法的收敛速度与稳定性</li>
+<li data-ao-id="slide-3-b2" data-ao-type="bullet" class="ao-el">更新方向由梯度 ∇L(w) 决定，步长由学习率 η 与梯度模长共同决定</li>
+<li data-ao-id="slide-3-b3" data-ao-type="bullet" class="ao-el">学习率过大可能导致震荡或发散，过小则收敛极慢，需谨慎调参</li>
+</ul>
+</div>
+<div class="ao-slide" data-ao-id="slide-4" data-ao-type="slide" data-ao-page="4" data-ao-layout="content">
+<h1 data-ao-id="slide-4-title" data-ao-type="heading" class="ao-el">反向传播与链式法则</h1>
+<p data-ao-id="slide-4-p5" data-ao-type="paragraph" class="ao-el">对于多层神经网络，损失函数 L 是参数 w 的复杂复合函数。直接求导极其困难。反向传播利用链式法则，将整体求导任务分解为局部导数的连乘。通过前向计算记录中间变量，反向时自输出层向输入层逐层累加梯度，实现了计算复杂度与网络规模呈线性的高效梯度求解。</p>
+<div data-ao-id="slide-4-f0" data-ao-type="formula" class="ao-el" data-ao-formula="1"><span class="katex"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mfrac><mrow><mi mathvariant="normal">∂</mi><mi>L</mi></mrow><mrow><mi mathvariant="normal">∂</mi><mi>w</mi></mrow></mfrac><mo>=</mo><mfrac><mrow><mi mathvariant="normal">∂</mi><mi>L</mi></mrow><mrow><mi mathvariant="normal">∂</mi><mi>y</mi></mrow></mfrac><mo>⋅</mo><mfrac><mrow><mi mathvariant="normal">∂</mi><mi>y</mi></mrow><mrow><mi mathvariant="normal">∂</mi><mi>w</mi></mrow></mfrac></mrow><annotation encoding="application/x-tex">\frac{\partial L}{\partial w} = \frac{\partial L}{\partial y} \cdot \frac{\partial y}{\partial w}</annotation></semantics></math></span></div>
+<ul data-ao-id="slide-4-bullets" data-ao-type="list" class="ao-el">
+<li data-ao-id="slide-4-b0" data-ao-type="bullet" class="ao-el">反向传播是计算深度神经网络梯度的核心算法，高效求解 ∇L(w)</li>
+<li data-ao-id="slide-4-b1" data-ao-type="bullet" class="ao-el">核心数学工具：链式法则，用于计算复合函数的偏导数</li>
+<li data-ao-id="slide-4-b2" data-ao-type="bullet" class="ao-el">计算过程分为前向传播（计算激活值与损失）与反向传播（计算梯度）两阶段</li>
+<li data-ao-id="slide-4-b3" data-ao-type="bullet" class="ao-el">反向阶段从输出层向输入层逐层传递误差信号，复用中间结果避免重复计算</li>
+<li data-ao-id="slide-4-b4" data-ao-type="bullet" class="ao-el">显著降低了深层网络梯度计算的时间复杂度，使训练深层网络成为可能</li>
+</ul>
+</div>
+<div class="ao-slide" data-ao-id="slide-5" data-ao-type="slide" data-ao-page="5" data-ao-layout="content">
+<h1 data-ao-id="slide-5-title" data-ao-type="heading" class="ao-el">变体与学习率</h1>
+<p data-ao-id="slide-5-p5" data-ao-type="paragraph" class="ao-el">根据每次迭代用于计算梯度的数据量不同，梯度下降衍生出三种主要变体。实际应用中，小批量梯度下降因其良好的硬件并行性与收敛特性成为主流。同时，学习率的选择与调度策略对模型最终性能至关重要，常结合预热、衰减或自适应算法以获得更优的训练效果。</p>
+<ul data-ao-id="slide-5-bullets" data-ao-type="list" class="ao-el">
+<li data-ao-id="slide-5-b0" data-ao-type="bullet" class="ao-el">批量梯度下降 (BGD)：使用全部样本计算梯度，稳定但计算量大、内存占用高</li>
+<li data-ao-id="slide-5-b1" data-ao-type="bullet" class="ao-el">随机梯度下降 (SGD)：每次使用单个样本更新参数，速度快但方差大、易震荡</li>
+<li data-ao-id="slide-5-b2" data-ao-type="bullet" class="ao-el">小批量梯度下降 (Mini-batch GD)：折中方案，每次使用一小批样本，兼顾效率与稳定性</li>
+<li data-ao-id="slide-5-b3" data-ao-type="bullet" class="ao-el">学习率 η 是关键超参数，过大易发散，过小收敛慢，常需动态调整或使用自适应优化器</li>
+<li data-ao-id="slide-5-b4" data-ao-type="bullet" class="ao-el">现代优化器（如 Adam, RMSprop）在 SGD 基础上引入动量与自适应学习率，进一步改善收敛性能</li>
+</ul>
+</div>
+</body>
+</html>

@@ -45,8 +45,6 @@ import {
   renderSlidevSource,
   previewHtmlFromSource,
   applySlidevEditIntent,
-  slidevBuild,
-  cleanupSlidevWorkDir,
   SLIDES_MD,
 } from './slidev/index.js';
 import { parseSlidevDeck } from './slidev/parse.js';
@@ -189,17 +187,13 @@ export async function generateFromBrief(
     const useSlidev = pptSourceOfTruth() === 'slidev';
     if (useSlidev) {
       source = renderSlidevSource(spec);
-      let renderHtml = previewHtmlFromSource(source);
-      let workDir: string | undefined;
-      try {
-        const built = await slidevBuild(source);
-        workDir = built.workDir;
-        if (built.html) renderHtml = built.html;
-      } catch {
-        // Fall back to measured preview HTML when CLI build unavailable (CI/offline).
-      } finally {
-        if (workDir) await cleanupSlidevWorkDir(workDir);
-      }
+      // Live center preview + box-select overlay use the self-contained preview
+      // HTML — exactly what buildSlidevDeckBoxes measures against, so box
+      // coordinates stay aligned with what the iframe shows. The real Slidev CLI
+      // build/export are on-demand deliverable paths (slidev/cli.ts), not the live
+      // per-edit render: a full vite build here is slow and yields a dist
+      // index.html that cannot load inline in the iframe (assets unresolved).
+      const renderHtml = previewHtmlFromSource(source);
       renderMime = 'text/html';
       renderBuffer = Buffer.from(renderHtml, 'utf-8');
       boxes = await buildSlidevDeckBoxes(source);
@@ -386,17 +380,9 @@ export async function runAnnotationEdit(
   if (project.kind === 'presentation') {
     const slidevMd = nextSource.find((f) => f.path === SLIDES_MD);
     if (slidevMd) {
-      let renderHtml = previewHtmlFromSource(nextSource);
-      let workDir: string | undefined;
-      try {
-        const built = await slidevBuild(nextSource);
-        workDir = built.workDir;
-        if (built.html) renderHtml = built.html;
-      } catch {
-        // preview HTML is sufficient for edit re-render when build fails
-      } finally {
-        if (workDir) await cleanupSlidevWorkDir(workDir);
-      }
+      // Self-contained preview HTML for the live re-render (matches boxmap; see
+      // the requirement pipeline note). Slidev CLI build/export stay on-demand.
+      const renderHtml = previewHtmlFromSource(nextSource);
       renderMime = 'text/html';
       renderBuffer = Buffer.from(renderHtml, 'utf-8');
       try {

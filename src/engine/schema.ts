@@ -213,6 +213,31 @@ export const briefSchema: Schema = {
   },
 };
 
+export const imageInsertSchema: Schema = {
+  kind: 'object',
+  additional: false,
+  fields: {
+    page: { schema: { kind: 'number', min: 1, int: true } },
+    // Either an explicit src (data:image/… or http(s) URL) or a colorCard spec.
+    src: { schema: { kind: 'string', minLength: 1, maxLength: 4_000_000 }, optional: true },
+    alt: { schema: { kind: 'string', maxLength: 400 }, optional: true },
+    // Optional anchor — place the image right after this node instead of at the
+    // end of the slide (e.g. the component the user currently has selected).
+    afterNodeId: { schema: { kind: 'string', minLength: 1 }, optional: true },
+    colorCard: {
+      schema: {
+        kind: 'object',
+        additional: false,
+        fields: {
+          hex: { schema: { kind: 'string', minLength: 3, maxLength: 9 } },
+          label: { schema: { kind: 'string', maxLength: 60 }, optional: true },
+        },
+      },
+      optional: true,
+    },
+  },
+};
+
 export const annotationCreateSchema: Schema = {
   kind: 'object',
   additional: false,

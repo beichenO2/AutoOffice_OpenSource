@@ -7,6 +7,8 @@ export {
   renderSlidesMd,
   previewHtmlFromSource,
   previewHtmlFromSlidesMd,
+  imageElementHtml,
+  deckHasClicks,
   SLIDES_MD,
   STYLES_PATH,
   COMPONENTS_DIR,
@@ -21,7 +23,14 @@ export {
   type SlidevSourceMapEntry,
 } from './sourcemap.js';
 
-export { applySlidevEditIntent } from './edit.js';
+export {
+  applySlidevEditIntent,
+  insertImageIntoSlideMarkdown,
+  setDeckAccentInFrontmatter,
+  recolorColorCardImages,
+  deckTextReplace,
+  collectDeckTextNodes,
+} from './edit.js';
 export { parseSlidevDeck, listSlidevNodeIds, type ParsedSlidevDeck } from './parse.js';
 
 export {
