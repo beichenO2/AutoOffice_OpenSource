@@ -66,24 +66,41 @@ export function renderFormulaMathml(tex: string, display = true): string {
 }
 
 /**
- * Render a text run with inline `$…$` LaTeX rendered as inline MathML, the rest
- * HTML-escaped. Lets formulas embedded in prose (bullets/paragraphs) — e.g.
- * "半衰期 $t_{1/2}=\\frac{\\ln 2}{k_e}$" — typeset as math instead of showing raw
- * LaTeX. Text with no `$` takes the plain escape path (unchanged behaviour).
+ * Convert a small, safe subset of inline Markdown on text that has ALREADY been
+ * HTML-escaped: `` `code` `` → <code>, `**bold**` → <strong>, `*italic*` → <em>.
+ * It runs on escaped text so the emphasized content stays XSS-safe (the `*`/`` ` ``
+ * markers are plain ASCII that escapeHtml never emits). This is what makes
+ * GLM-authored `**price**` render as bold instead of showing literal asterisks.
+ * Markers must hug their content (no adjacent whitespace) so stray `*`/`$` in prose
+ * (e.g. "a * b", "~$20") are left untouched.
+ */
+export function renderInlineMarkup(escaped: string): string {
+  return escaped
+    .replace(/`([^`\n]+?)`/g, '<code>$1</code>')
+    .replace(/\*\*(?!\s)([^\n]+?)(?<!\s)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(?!\s)([^*\n]+?)(?<!\s)\*/g, '<em>$1</em>');
+}
+
+/**
+ * Render a text run with inline `$…$` LaTeX rendered as inline MathML, and a safe
+ * subset of Markdown (`**bold**`/`*italic*`/`` `code` ``) applied to the rest.
+ * Lets formulas embedded in prose (bullets/paragraphs) — e.g.
+ * "半衰期 $t_{1/2}=\\frac{\\ln 2}{k_e}$" — typeset as math, while keyword emphasis
+ * authored as `**price**` renders as real bold instead of literal asterisks.
  */
 export function renderInlineText(raw: string): string {
   const s = raw ?? '';
-  if (!s.includes('$')) return escapeHtml(s);
+  if (!s.includes('$')) return renderInlineMarkup(escapeHtml(s));
   let out = '';
   let last = 0;
   const re = /\$([^$\n]+?)\$/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(s))) {
-    out += escapeHtml(s.slice(last, m.index));
+    out += renderInlineMarkup(escapeHtml(s.slice(last, m.index)));
     out += renderFormulaMathml(m[1]!, false);
     last = m.index + m[0].length;
   }
-  out += escapeHtml(s.slice(last));
+  out += renderInlineMarkup(escapeHtml(s.slice(last)));
   return out;
 }
 

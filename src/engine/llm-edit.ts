@@ -72,6 +72,206 @@ export async function llmRewriteText(current: string, instruction: string): Prom
   return out;
 }
 
+// ---------------------------------------------------------------------------
+// Visual style micro-edits (元素级"微调": line weight / alignment / size /
+// spacing / color / radius …). A bounded whitelist keeps both GLM output and the
+// deterministic fast-path to safe, self-contained inline-style props applied to
+// the framed node only (the collateral guard keeps it scoped).
+// ---------------------------------------------------------------------------
+
+/** Current inline `style` attribute of a node (empty string if none / no HTML). */
+export function nodeCurrentStyle(source: SourceFile[], nodeId: string): string {
+  for (const f of source) {
+    if (!/[<]/.test(f.content)) continue;
+    const dom = new JSDOM(`<body>${f.content}</body>`);
+    const el = dom.window.document.querySelector(`[data-ao-id="${cssEscape(nodeId)}"]`);
+    if (el) return (el.getAttribute('style') ?? '').trim();
+  }
+  return '';
+}
+
+const NAMED_COLORS: Record<string, string> = {
+  红: '#c0392b', 红色: '#c0392b', 大红: '#c0392b', 蓝: '#2563eb', 蓝色: '#2563eb', 绿: '#159e5b', 绿色: '#159e5b',
+  黄: '#e6a700', 黄色: '#e6a700', 橙: '#e8590c', 橙色: '#e8590c', 紫: '#7c3aed', 紫色: '#7c3aed',
+  黑: '#111827', 黑色: '#111827', 白: '#ffffff', 白色: '#ffffff', 灰: '#6b7280', 灰色: '#6b7280', 金: '#c8a02c', 金色: '#c8a02c',
+  red: '#c0392b', blue: '#2563eb', green: '#159e5b', yellow: '#e6a700', orange: '#e8590c', purple: '#7c3aed',
+  black: '#111827', white: '#ffffff', gray: '#6b7280', grey: '#6b7280', gold: '#c8a02c',
+};
+
+function sanitizeColor(v: string): string | null {
+  const t = (v ?? '').trim();
+  if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(t)) return t.toLowerCase();
+  if (/^rgba?\(\s*[\d.\s,%/]+\)$/i.test(t)) return t;
+  return NAMED_COLORS[t] ?? NAMED_COLORS[t.toLowerCase()] ?? null;
+}
+
+function sanitizeSize(
+  v: string,
+  spec: { kw?: string[]; px?: [number, number]; vw?: [number, number]; em?: [number, number] },
+): string | null {
+  const t = (v ?? '').trim();
+  if (spec.kw?.includes(t)) return t;
+  const m = /^(-?\d*\.?\d+)\s*(px|vw|em)?$/.exec(t);
+  if (!m) return null;
+  const n = parseFloat(m[1]!);
+  const unit = m[2] ?? '';
+  const inRange = (r?: [number, number]) => !!r && n >= r[0] && n <= r[1];
+  if (unit === 'px' && inRange(spec.px)) return `${n}px`;
+  if (unit === 'vw' && inRange(spec.vw)) return `${n}vw`;
+  if (unit === 'em' && inRange(spec.em)) return `${n}em`;
+  if (!unit && inRange(spec.px)) return `${n}px`;
+  return null;
+}
+
+const numRange = (lo: number, hi: number) => (v: string): string | null => {
+  const t = (v ?? '').trim();
+  if (!/^-?\d*\.?\d+$/.test(t)) return null;
+  const n = parseFloat(t);
+  return n >= lo && n <= hi ? String(n) : null;
+};
+
+/** Whitelist: CSS prop → validator returning a safe value (or null to drop). */
+const STYLE_PROPS: Record<string, (v: string) => string | null> = {
+  'text-align': (v) => (/^(left|right|center|justify)$/.test(v.trim()) ? v.trim() : null),
+  'font-weight': (v) => (/^(normal|bold|bolder|lighter|[1-9]00)$/.test(v.trim()) ? v.trim() : null),
+  'font-style': (v) => (/^(normal|italic|oblique)$/.test(v.trim()) ? v.trim() : null),
+  // Explicit sizes only — the relative keywords (larger/smaller) resolve against
+  // the PARENT font-size, which would shrink a vw-sized title; size nudges instead
+  // go through sizeNudgeFactor()×roleBaseFontVw() to a concrete vw.
+  'font-size': (v) => sanitizeSize(v, { px: [8, 200], vw: [0.6, 12], em: [0.4, 6] }),
+  'line-height': numRange(1, 3),
+  'letter-spacing': (v) => (v.trim() === 'normal' ? 'normal' : sanitizeSize(v, { px: [-3, 24], vw: [0, 2], em: [-0.06, 0.8] })),
+  color: sanitizeColor,
+  'background-color': sanitizeColor,
+  opacity: numRange(0.05, 1),
+  'border-style': (v) => (/^(solid|dashed|dotted|double|none)$/.test(v.trim()) ? v.trim() : null),
+  'border-width': (v) => sanitizeSize(v, { px: [0, 24], vw: [0, 2.5], em: [0, 2] }),
+  'border-left-width': (v) => sanitizeSize(v, { px: [0, 24], vw: [0, 2.5], em: [0, 2] }),
+  'border-color': sanitizeColor,
+  'border-radius': (v) => sanitizeSize(v, { px: [0, 80], vw: [0, 5], em: [0, 5] }),
+  'text-transform': (v) => (/^(none|uppercase|lowercase|capitalize)$/.test(v.trim()) ? v.trim() : null),
+  'margin-top': (v) => sanitizeSize(v, { px: [0, 200], vw: [0, 10], em: [0, 10] }),
+  'margin-bottom': (v) => sanitizeSize(v, { px: [0, 200], vw: [0, 10], em: [0, 10] }),
+  padding: (v) => sanitizeSize(v, { px: [0, 120], vw: [0, 8], em: [0, 8] }),
+};
+
+/** Keep only whitelisted, validated style declarations. */
+export function sanitizeStyleMap(map: Record<string, unknown>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [kRaw, vRaw] of Object.entries(map ?? {})) {
+    const k = String(kRaw).trim().toLowerCase();
+    const val = STYLE_PROPS[k]?.(String(vRaw));
+    if (val != null) out[k] = val;
+  }
+  return out;
+}
+
+/** Common visual phrases → deterministic style map (no LLM needed). */
+export function deterministicStyleOps(instruction: string): Record<string, string> {
+  const s = (instruction ?? '').toLowerCase();
+  const out: Record<string, string> = {};
+  const any = (arr: string[]) => arr.some((h) => s.includes(h));
+  if (any(['居中', '水平居中', 'center', 'centre'])) out['text-align'] = 'center';
+  else if (any(['左对齐', 'left align', 'align left'])) out['text-align'] = 'left';
+  else if (any(['右对齐', 'right align', 'align right'])) out['text-align'] = 'right';
+  else if (any(['两端对齐', 'justify'])) out['text-align'] = 'justify';
+  if (any(['取消加粗', '不加粗', '别加粗', '不要加粗'])) out['font-weight'] = '400';
+  else if (any(['加粗', '变粗', '更粗一点', '更粗', 'bold'])) out['font-weight'] = '800';
+  if (any(['斜体', 'italic'])) out['font-style'] = 'italic';
+  // font-size is added by the caller via sizeNudgeFactor()×roleBaseFontVw (reliable
+  // concrete vw), because a relative keyword here would resolve against the parent.
+  if (any(['行距大', '行距松', '行高大', '行间距大', '宽松'])) out['line-height'] = '1.9';
+  else if (any(['行距小', '行距紧', '行高小', '紧凑'])) out['line-height'] = '1.25';
+  if (any(['字距大', '字距松', '字间距大'])) out['letter-spacing'] = '0.12em';
+  else if (any(['字距小', '字距紧', '字间距小'])) out['letter-spacing'] = '-0.02em';
+  return out;
+}
+
+/**
+ * GLM maps a free-form visual instruction (「这条线细一点」「标题标红居中」) → a small
+ * whitelisted inline-style map for the framed node. Everything is validated by
+ * sanitizeStyleMap, so an out-of-list or malformed value is simply dropped.
+ */
+export async function llmStyleEdit(
+  currentStyle: string,
+  currentText: string,
+  instruction: string,
+  opts: { isImage?: boolean } = {},
+): Promise<Record<string, string>> {
+  const props = Object.keys(STYLE_PROPS).join(', ');
+  const system = [
+    '你是 AutoOffice 幻灯片的"视觉微调"助手。用户框选了一个元素，提出视觉/排版上的修改意见（不是改文字内容）。',
+    `只输出一个 JSON：{"style":{"CSS属性":"值"}}，属性只能取自白名单：[${props}]。`,
+    '不要解释、不要 Markdown、不要多余字段；值要具体合法（颜色用 #RRGGBB 或常见色名；尺寸带单位 px/vw/em；font-size 也可用 larger/smaller）。',
+    '只给需要改动的属性，其余别动；保持元素原有用途（标题仍是标题）。',
+    opts.isImage ? '这是图片元素：可调 border-radius / border-width / border-color / opacity 等。' : '',
+  ].filter(Boolean).join('');
+  const user = `元素当前内容：${currentText || '(图片/无文字)'}\n当前 style：${currentStyle || '(无)'}\n修改意见：${instruction}\n输出 JSON：`;
+  const raw = await chatCompletion(
+    [{ role: 'system', content: system }, { role: 'user', content: user }],
+    { capability: '1000', temperature: 0.2, maxTokens: 300 },
+  );
+  try {
+    const s = raw.indexOf('{');
+    const e = raw.lastIndexOf('}');
+    if (s === -1 || e <= s) return {};
+    const parsed = JSON.parse(raw.slice(s, e + 1));
+    const styleObj =
+      parsed && typeof parsed === 'object' && (parsed as { style?: unknown }).style && typeof (parsed as { style?: unknown }).style === 'object'
+        ? (parsed as { style: Record<string, unknown> }).style
+        : (parsed as Record<string, unknown>);
+    return sanitizeStyleMap(styleObj as Record<string, unknown>);
+  } catch {
+    return {};
+  }
+}
+
+/** Lowercased tag name of a node in the revision source (''+ if not found). */
+export function nodeTag(source: SourceFile[], nodeId: string): string {
+  for (const f of source) {
+    if (!/[<]/.test(f.content)) continue;
+    const dom = new JSDOM(`<body>${f.content}</body>`);
+    const el = dom.window.document.querySelector(`[data-ao-id="${cssEscape(nodeId)}"]`);
+    if (el) return el.tagName.toLowerCase();
+  }
+  return '';
+}
+
+/** Direction of a "make it bigger / smaller" ask → a font-size multiplier (1 = none). */
+export function sizeNudgeFactor(instruction: string): number {
+  const s = (instruction ?? '').toLowerCase();
+  const any = (arr: string[]) => arr.some((h) => s.includes(h));
+  if (any(['大一点', '大一些', '大点', '放大', '更大', '字大', '再大点', '再大一点', 'bigger', 'larger'])) return 1.18;
+  if (any(['小一点', '小一些', '小点', '缩小', '更小', '字小', '再小点', '再小一点', 'smaller'])) return 0.85;
+  return 1;
+}
+
+/** Approx base font-size (vw) per node role — for turning a size nudge into a concrete vw. */
+export function roleBaseFontVw(tag: string): number {
+  switch ((tag || '').toLowerCase()) {
+    case 'h1': return 3.5;
+    case 'h2': return 2.5;
+    case 'li': return 2.3;
+    case 'p': return 2.1;
+    default: return 2.1;
+  }
+}
+
+/** Merge validated style props into an existing inline-style string (add wins). */
+export function mergeInlineStyle(current: string, add: Record<string, string>): string {
+  const obj: Record<string, string> = {};
+  for (const decl of (current ?? '').split(';')) {
+    const i = decl.indexOf(':');
+    if (i > 0) {
+      const k = decl.slice(0, i).trim().toLowerCase();
+      const v = decl.slice(i + 1).trim();
+      if (k && v) obj[k] = v;
+    }
+  }
+  for (const [k, v] of Object.entries(add)) obj[k] = v;
+  return Object.entries(obj).map(([k, v]) => `${k}:${v}`).join(';');
+}
+
 /**
  * Deck-wide *semantic* unification: given every editable text node (id + current
  * text) and a global instruction like「整册术语和语气统一得更专业些」, ask GLM which

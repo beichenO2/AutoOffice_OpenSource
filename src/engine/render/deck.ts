@@ -207,6 +207,38 @@ export async function exportDeckPdfWysiwyg(html: string, opts: { withClicks?: bo
   return shotsToPdf(await captureDeckShots(html, opts));
 }
 
+/**
+ * WYSIWYG PDF export as a *vector* document (the default export). Renders the exact
+ * preview HTML through Chromium's print path (`page.pdf`), so the report looks like the
+ * live /aoide/ preview AND keeps selectable / searchable text — small file, crisp at any
+ * zoom — instead of the screenshot bitmap `exportDeckPdfWysiwyg` produces. The preview
+ * HTML's `@media print` rules put one `.ao-slide` per 1280×720 page. Use the screenshot
+ * path only for opt-in step-animated (`withClicks`) exports, where each v-click step needs
+ * its own page and cannot be a single vector render.
+ */
+export async function exportDeckPdfVector(html: string): Promise<Buffer> {
+  const dir = await mkdtemp(join(tmpdir(), 'aoide-vec-pdf-'));
+  const file = join(dir, 'deck.html');
+  await writeFile(file, html, 'utf-8');
+  try {
+    const browser = await getBrowser();
+    const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+    await page.goto(`file://${file}`, { waitUntil: FILE_HTML_WAIT });
+    await page.evaluate(async () => {
+      try {
+        await (document as unknown as { fonts?: { ready?: Promise<unknown> } }).fonts?.ready;
+      } catch {
+        /* fonts API absent — proceed */
+      }
+    });
+    const pdf = await page.pdf({ printBackground: true, width: '1280px', height: '720px' });
+    await page.close();
+    return Buffer.from(pdf);
+  } finally {
+    await rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
 /** WYSIWYG PPTX export from preview HTML — matches the live /aoide/ preview exactly. */
 export async function exportDeckPptxWysiwyg(html: string, opts: { withClicks?: boolean } = {}): Promise<Buffer> {
   return shotsToPptx(await captureDeckShots(html, opts));

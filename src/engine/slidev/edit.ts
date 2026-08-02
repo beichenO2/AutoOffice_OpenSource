@@ -114,6 +114,26 @@ export function setDeckAccentInFrontmatter(md: string, hex: string): string {
 }
 
 /**
+ * Set / replace the deck-wide *visual style preset* in the slides.md YAML
+ * frontmatter (`aoStyle:`). The preview reads it and injects a style pack
+ * (accent + cover + font + slide bg/ink + bullets), restyling the whole deck's
+ * look-and-feel. Surgical: only the frontmatter block is touched.
+ */
+export function setDeckStyleInFrontmatter(md: string, styleId: string): string {
+  const safe = String(styleId).trim().replace(/[^A-Za-z\u4e00-\u9fff]/g, '');
+  if (!safe) return md;
+  if (!md.startsWith('---')) return `---\naoStyle: ${JSON.stringify(safe)}\n---\n\n${md}`;
+  const closeIdx = md.indexOf('\n---', 3);
+  if (closeIdx === -1) return md;
+  const front = md.slice(0, closeIdx);
+  const rest = md.slice(closeIdx);
+  if (/^aoStyle:\s*.*$/m.test(front)) {
+    return front.replace(/^aoStyle:\s*.*$/m, `aoStyle: ${JSON.stringify(safe)}`) + rest;
+  }
+  return `${front}\naoStyle: ${JSON.stringify(safe)}${rest}`;
+}
+
+/**
  * Recolor every color-card placeholder illustration (`data:image/svg+xml` src)
  * in the deck via a caller-provided factory, preserving each image's own label.
  * Real photos / external URLs are left untouched. Returns the changed node ids.

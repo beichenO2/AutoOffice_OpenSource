@@ -219,7 +219,7 @@ describe('server — HTTP API', () => {
     expect(data.slides).toBeGreaterThanOrEqual(2);
     expect(data.revision).toBeTruthy();
     expect(data.grounding).toBeTruthy(); // #4 data-rigor report is always returned
-  });
+  }, 30000); // endpoint may run real GLM when AUTOOFFICE_LLM_EDIT=1; the default 5s timeout is too tight for that path
 
   it('engine deck endpoint rejects a missing topic', async () => {
     const res = await httpReq('POST', '/api/engine/decks', { research: 'no topic here' });

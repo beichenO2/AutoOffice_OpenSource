@@ -1,11 +1,13 @@
 /**
- * WYSIWYG export (Playwright) — the exported PDF/PPTX is rendered from the exact
- * preview HTML the user sees at /aoide/, so it matches the live preview instead of
- * the bare Slidev default theme. Also covers S7 step-animated export: `withClicks`
- * expands each v-click fragment into its own slide/page.
+ * WYSIWYG export (Playwright) — the exported file is rendered from the exact preview
+ * HTML the user sees at /aoide/, so it matches the live preview instead of the bare
+ * Slidev default theme. The default PDF is a *vector* render (Chromium page.pdf), so
+ * text stays selectable/searchable — not a screenshot bitmap. The opt-in `withClicks`
+ * path expands each v-click fragment into its own slide/page (screenshot-based).
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, rm } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import JSZip from 'jszip';
@@ -48,6 +50,15 @@ describe('WYSIWYG export (Playwright) — matches the live preview', () => {
     expect(pdf.mime).toBe('application/pdf');
     expect(pdf.buffer.subarray(0, 5).toString()).toBe('%PDF-');
     expect(pdf.buffer.length).toBeGreaterThan(1000);
+
+    // Default PDF is a *vector* render of the preview HTML → text stays selectable
+    // (not a screenshot bitmap). Verify with poppler's pdftotext when it is present;
+    // skip the assertion gracefully on machines without poppler.
+    const extract = spawnSync('pdftotext', ['-', '-'], { input: pdf.buffer });
+    if (!extract.error && extract.status === 0) {
+      const text = (extract.stdout?.toString() ?? '').replace(/\s+/g, '');
+      expect(text.length).toBeGreaterThan(20);
+    }
 
     const pptx = await svc.exportProject(project.id, 'pptx');
     expect(pptx.mime).toContain('presentationml');

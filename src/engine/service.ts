@@ -16,7 +16,15 @@ import {
   llmPickImageColor,
   colorCardDataUri,
   nodeCurrentText,
+  nodeCurrentStyle,
   nodeIsImage,
+  nodeTag,
+  deterministicStyleOps,
+  sizeNudgeFactor,
+  roleBaseFontVw,
+  sanitizeStyleMap,
+  llmStyleEdit,
+  mergeInlineStyle,
 } from './llm-edit.js';
 import { emitEvent, listEvents } from './events.js';
 import { assertValid, annotationCreateSchema, editIntentSchema, imageInsertSchema } from './schema.js';
@@ -33,7 +41,7 @@ import {
 } from './orchestrator.js';
 import { isHighConfidence } from './html/hit-test.js';
 import { newTask, transitionTask } from './task-state.js';
-import { exportDeckPdfWysiwyg, exportDeckPptxWysiwyg, measureDeckBoxes } from './render/deck.js';
+import { exportDeckPdfVector, exportDeckPdfWysiwyg, exportDeckPptxWysiwyg, measureDeckBoxes } from './render/deck.js';
 import { pptSourceOfTruth } from './config.js';
 import {
   SLIDES_MD,
@@ -43,6 +51,7 @@ import {
   insertImageIntoSlideMarkdown,
   imageElementHtml,
   setDeckAccentInFrontmatter,
+  setDeckStyleInFrontmatter,
   recolorColorCardImages,
   deckTextReplace,
   collectDeckTextNodes,
@@ -355,14 +364,21 @@ export class EngineService {
     // across multiple nodes (consistent terminology / tone). Same deck-anchored
     // gating as deckColor/deckText: the framed node only anchors intent.
     const deckSemantic = !!plan && plan.scope === 'deck' && plan.axis === 'text' && !plan.textReplace;
+    // PPT skill (visual style): a whole-deck style preset (科技风/党政风/商务…) restyles
+    // the entire deck's look-and-feel (font + palette + cover + bullets). Like a deck
+    // recolor, the framed node only anchors intent — no per-node confidence needed.
+    const deckStyle = !!plan && plan.scope === 'deck' && plan.axis === 'style' && !!plan.styleId;
+    // Element-level visual micro-tweak (line weight / alignment / size / spacing…) on
+    // the framed node only — needs a confident target like a text rewrite.
+    const localStyle = !!plan && plan.scope === 'local' && plan.axis === 'style';
     // An image target is edited by recoloring/swapping its src (replaceText is
     // meaningless on <img>), so images route to the GLM recolor path — unless the
     // instruction is a deck-wide color/term change, which supersedes the local one.
     const isImg = !deckColor && !deckText && !deckSemantic && !!top && confident && llmEditEnabled() && targetIsImage;
     // With the LLM edit assistant on, a confident target + a free-form (non-literal)
     // instruction like「这句太啰嗦」is resolvable: GLM produces the replacement.
-    const canLlm = !deckColor && !deckText && !deckSemantic && !!top && confident && !rewrite.literal && llmEditEnabled();
-    const canEdit = !!top && (deckColor || deckText || deckSemantic || (confident && (isImg || rewrite.literal || canLlm)));
+    const canLlm = !deckColor && !deckText && !deckSemantic && !deckStyle && !localStyle && !!top && confident && !rewrite.literal && llmEditEnabled();
+    const canEdit = !!top && (deckColor || deckText || deckSemantic || deckStyle || (confident && (isImg || rewrite.literal || canLlm || localStyle)));
     const ambiguityReason = !candidates.length
       ? '框选区域没有命中任何可编辑节点'
       : canEdit
@@ -415,6 +431,14 @@ export class EngineService {
         // Deck-wide semantic unification → GLM rewrites multiple nodes consistently.
         if (deckSemantic) {
           return await this.deckSemanticEdit(project, head, annotation, input.instruction);
+        }
+        // Deck-wide visual style preset (科技风/党政风/商务…) → restyle whole deck.
+        if (deckStyle && plan?.styleId) {
+          return await this.deckStyleEdit(project, head, annotation, plan.styleId);
+        }
+        // Element-level visual micro-tweak → scoped inline-style edit on this node.
+        if (localStyle) {
+          return await this.localStyleEdit(project, head, annotation, top.nodeId, input.instruction);
         }
         // Image target → recolor / swap the illustration via GLM (setAttr src).
         if (isImg) {
@@ -734,6 +758,153 @@ export class EngineService {
   }
 
   /**
+   * PPT skill — deck-wide *visual style preset*. A framed instruction like
+   *「整册改成科技风 / 党政风 / 商务简约」sets `aoStyle` in the frontmatter, which the
+   * preview turns into a whole-deck restyle (font + palette + cover + bullets).
+   * One revision, fully undoable; structure / data-ao-id untouched (CSS only).
+   */
+  private async deckStyleEdit(
+    project: Project,
+    head: Revision,
+    annotation: Annotation,
+    styleId: string,
+  ): Promise<{ annotation: Annotation; revision: Revision }> {
+    const { repo, store, idFactory, clock } = this.deps();
+    const mdIdx = head.source.findIndex((f) => f.path === SLIDES_MD);
+    if (mdIdx === -1) throw new EngineValidationError('deck style requires a Slidev deck');
+
+    const md = setDeckStyleInFrontmatter(head.source[mdIdx]!.content, styleId);
+    const nextSource = head.source.map((f, i) => (i === mdIdx ? { ...f, content: md } : { ...f }));
+    const renderBuffer = Buffer.from(previewHtmlFromSource(nextSource), 'utf-8');
+    const boxes = await buildSlidevDeckBoxes(nextSource);
+    const revision = buildRevision({
+      project,
+      source: nextSource,
+      origin: 'edit',
+      label: `deck style ${styleId}`,
+      renderStatus: 'rendered',
+      renderMime: 'text/html',
+      patchSummary: `deckStyle(${styleId})`,
+      idFactory,
+      clock,
+    });
+    revision.renderPath = await store.writeRender(project.id, `${revision.id}.html`, renderBuffer);
+    const nodes = [...indexNodes(project, nextSource).values()];
+    const map: SourceMap = { id: idFactory('map'), revisionId: revision.id, nodes, boxes };
+    await repo.putSourceMap(map);
+    revision.sourceMapId = map.id;
+
+    const committed = await commitRendered(repo, project, revision, clock);
+    annotation.status = 'resolved';
+    annotation.resolvedRevisionId = committed.revision.id;
+    await repo.putAnnotation(annotation);
+    await emitEvent(this.store, 'edit.applied', project.id, {
+      revisionId: committed.revision.id,
+      action: 'deck-style',
+      style: styleId,
+    });
+    await emitEvent(this.store, 'revision.committed', project.id, { revisionId: committed.revision.id });
+    return { annotation, revision: committed.revision };
+  }
+
+  /**
+   * Element-level visual micro-tweak (线粗/居中/字号/间距/描边/标红…). A common phrase
+   * resolves deterministically; anything else asks GLM for a small whitelisted
+   * inline-style map, which is merged onto the framed node via a scoped setAttr
+   * (collateral-checked). Nothing else changes. If no safe property is produced
+   * the annotation stays located-but-unresolved (no empty commit).
+   */
+  private async localStyleEdit(
+    project: Project,
+    head: Revision,
+    annotation: Annotation,
+    nodeId: string,
+    instruction: string,
+  ): Promise<{ annotation: Annotation; revision?: Revision }> {
+    const { repo, store, idFactory, clock } = this.deps();
+    const isImage = nodeIsImage(head.source, nodeId);
+
+    let styleMap = deterministicStyleOps(instruction);
+    // Reliable size nudge → a concrete vw based on the node's role (avoids the
+    // font-size:larger-shrinks-a-vw-title trap).
+    const factor = sizeNudgeFactor(instruction);
+    if (factor !== 1 && !styleMap['font-size']) {
+      styleMap = { ...styleMap, 'font-size': `${(roleBaseFontVw(nodeTag(head.source, nodeId)) * factor).toFixed(2)}vw` };
+    }
+    if (Object.keys(styleMap).length === 0 && llmEditEnabled()) {
+      styleMap = await llmStyleEdit(
+        nodeCurrentStyle(head.source, nodeId),
+        nodeCurrentText(head.source, nodeId),
+        instruction,
+        { isImage },
+      );
+    }
+    styleMap = sanitizeStyleMap(styleMap);
+    if (Object.keys(styleMap).length === 0) {
+      annotation.ambiguityReason = '没读懂要调整的视觉属性，换个说法（如「居中 / 字大一点 / 这条线细一点 / 标题标红」）';
+      await repo.putAnnotation(annotation);
+      await emitEvent(this.store, 'target.ambiguous', project.id, { annotationId: annotation.id, reason: 'style_no_op' });
+      return { annotation };
+    }
+
+    const mergedStyle = mergeInlineStyle(nodeCurrentStyle(head.source, nodeId), styleMap);
+    const intent = buildSetAttrIntent(
+      {
+        id: idFactory('edit'),
+        projectId: project.id,
+        baseRevisionId: head.id,
+        kind: 'content',
+        scope: 'local',
+        targetNodeIds: [nodeId],
+        instruction,
+        confidence: 0.9,
+        rationale: 'element visual style tweak',
+      },
+      nodeId,
+      { style: mergedStyle },
+    );
+    assertValid(intent, editIntentSchema, 'EditIntent');
+
+    const result = applySlidevEditIntent(head.source, intent);
+    if (!result.collateral.ok) {
+      throw new EngineValidationError(`Collateral change: ${result.collateral.unexpectedChanged.join(',')}`);
+    }
+    const nextSource = result.source;
+    const renderBuffer = Buffer.from(previewHtmlFromSource(nextSource), 'utf-8');
+    const boxes = await buildSlidevDeckBoxes(nextSource);
+    const revision = buildRevision({
+      project,
+      source: nextSource,
+      origin: 'edit',
+      label: `style ${nodeId}`,
+      renderStatus: 'rendered',
+      renderMime: 'text/html',
+      editIntentId: intent.id,
+      patchSummary: `setStyle(${nodeId}; ${Object.keys(styleMap).join(',')})`,
+      idFactory,
+      clock,
+    });
+    revision.renderPath = await store.writeRender(project.id, `${revision.id}.html`, renderBuffer);
+    const nodes = [...indexNodes(project, nextSource).values()];
+    const map: SourceMap = { id: idFactory('map'), revisionId: revision.id, nodes, boxes };
+    await repo.putSourceMap(map);
+    revision.sourceMapId = map.id;
+    await repo.putEditIntent(intent);
+
+    const committed = await commitRendered(repo, project, revision, clock);
+    annotation.status = 'resolved';
+    annotation.resolvedRevisionId = committed.revision.id;
+    await repo.putAnnotation(annotation);
+    await emitEvent(this.store, 'edit.applied', project.id, {
+      revisionId: committed.revision.id,
+      action: 'style',
+      props: Object.keys(styleMap),
+    });
+    await emitEvent(this.store, 'revision.committed', project.id, { revisionId: committed.revision.id });
+    return { annotation, revision: committed.revision };
+  }
+
+  /**
    * User-driven "insert image / reference image" for Slidev decks: adds a new
    * editable `<img>` element to a slide (at the end, or right after an anchor
    * node), re-renders, rebuilds the box map and commits a revision. The new
@@ -1004,7 +1175,13 @@ export class EngineService {
       return { buffer: Buffer.from(html, 'utf-8'), mime: 'text/html', filename: `${project.name}.html` };
     }
     if (format === 'pdf') {
-      const buffer = await exportDeckPdfWysiwyg(html, { withClicks });
+      // Default: a *vector* page.pdf of the exact preview HTML → looks like /aoide/ AND
+      // keeps selectable/searchable text (small file, crisp at any zoom). The opt-in
+      // `?clicks=1` path uses screenshots so each v-click step becomes its own page
+      // (step-by-step reveal can't be a single vector render).
+      const buffer = withClicks
+        ? await exportDeckPdfWysiwyg(html, { withClicks: true })
+        : await exportDeckPdfVector(html);
       return { buffer, mime: 'application/pdf', filename: `${project.name}.pdf` };
     }
 

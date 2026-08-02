@@ -46,4 +46,7 @@ export NODE_ENV=${NODE_ENV:-production}
 export PORT
 export AUTOOFFICE_PORT=$PORT
 export POLAR_RUNTIME_MANAGED=1
+# Enable GLM-backed free-form box-select edits ("这句太啰嗦"/"换个更专业的说法").
+# Opt-in flag; tests set their own env, so this only affects the running service.
+export AUTOOFFICE_LLM_EDIT=${AUTOOFFICE_LLM_EDIT:-1}
 exec "$NODE_BIN" dist/cli.js serve -p "$PORT"

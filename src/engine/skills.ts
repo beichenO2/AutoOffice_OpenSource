@@ -9,7 +9,7 @@
  * color/text generation elsewhere), so it is offline-safe and fully unit-tested.
  */
 
-export type EditAxis = 'color' | 'text' | 'image';
+export type EditAxis = 'color' | 'text' | 'image' | 'style';
 export type EditScope = 'deck' | 'local';
 
 export interface EditScopePlan {
@@ -25,6 +25,11 @@ export interface EditScopePlan {
    * free-form single rewrite (which stays local).
    */
   textReplace?: { from: string; to: string };
+  /**
+   * For a deck-wide *style preset* (axis='style', scope='deck'): the canonical
+   * style-pack id (`tech`/`gov`/`business`) the instruction asked for.
+   */
+  styleId?: string;
 }
 
 // Color / palette / theme vocabulary (zh + en). A color-axis instruction on ANY
@@ -46,6 +51,36 @@ const LOCAL_ONLY_HINTS = [
   '只改这', '只改此', '仅此', '仅改', '只这', '就这一', '只有这', '这一处', '单独这', '仅这一',
   'only this', 'just this', 'this one', 'this slide only', 'only here',
 ];
+
+// Whole-deck VISUAL STYLE presets (科技风 / 党政风 / 商务简约…). Any of these
+// keywords → restyle the entire deck's look-and-feel (font + palette + cover +
+// bullets), the deck-scope 'style' axis. Ordered so canonical ids resolve too.
+const STYLE_PRESETS: { id: string; hints: string[] }[] = [
+  { id: 'tech', hints: ['科技风', '科技感', '科技', '未来感', '未来科技', '极客风', '赛博', 'tech', 'technology', 'futuristic', 'cyber'] },
+  { id: 'gov', hints: ['党政风', '党政', '政务风', '政务', '公文风', '公文格式', '公文', '红头文件', '红头', '庄重风', 'government', 'official', 'party'] },
+  { id: 'business', hints: ['商务简约', '商务风', '商务', '商业风', '企业风', '企业', 'corporate', 'business'] },
+  { id: 'academic', hints: ['学术风', '学术', '论文风', '论文', '科研', '学院风', '国标风', '国标', '顶会', '顶会风', '基金申请', '基金风', '答辩风', '严谨风', 'academic', 'scholarly', 'conference', 'grant', 'nsfc'] },
+  { id: 'minimal', hints: ['极简风', '极简主义', '极简', '简约风', '简约', '性冷淡', 'minimal', 'minimalist'] },
+];
+
+// Element-level VISUAL micro-tweaks (line weight / alignment / size / spacing /
+// radius…). Framing a component + any of these → local 'style' edit on that node.
+const VISUAL_TWEAK_HINTS = [
+  '居中', '左对齐', '右对齐', '两端对齐', '对齐', '加粗', '变粗', '粗一点', '粗一些', '细一点', '细一些', '变细',
+  '大一点', '大一些', '小一点', '小一些', '放大', '缩小', '字大', '字小', '字号', '更大', '更小',
+  '行距', '行高', '间距', '紧凑', '松一点', '宽松', '字距', '斜体',
+  '圆角', '描边', '边框', '线粗', '线细', '阴影', '透明', '倾斜', '底色', '高亮',
+  'bold', 'align', 'center', 'centre', 'bigger', 'smaller', 'larger', 'thinner', 'thicker', 'spacing', 'italic', 'rounded',
+];
+
+/** Resolve a whole-deck style-preset keyword to a canonical pack id, or null. */
+export function resolveStylePreset(instruction: string): string | null {
+  const s = (instruction ?? '').toLowerCase();
+  for (const p of STYLE_PRESETS) {
+    if (p.hints.some((h) => s.includes(h.toLowerCase()))) return p.id;
+  }
+  return null;
+}
 
 function hasAny(haystack: string, needles: string[]): boolean {
   return needles.some((n) => haystack.includes(n));
@@ -120,11 +155,34 @@ export function classifyEditScope(
   const forceLocal = hasAny(s, LOCAL_ONLY_HINTS);
   const hasColor = hasAny(s, COLOR_HINTS);
   const hasGlobal = hasAny(s, GLOBAL_HINTS);
+  const stylePreset = resolveStylePreset(instruction ?? '');
+  const hasVisualTweak = hasAny(s, VISUAL_TWEAK_HINTS);
 
-  const axis: EditAxis = hasColor ? 'color' : opts.isImage ? 'image' : 'text';
+  const axis: EditAxis = hasColor
+    ? 'color'
+    : stylePreset || hasVisualTweak
+      ? 'style'
+      : opts.isImage
+        ? 'image'
+        : 'text';
 
   if (forceLocal) {
+    // "only this" pins the edit to the framed node regardless of axis (a style
+    // preset is inherently deck-wide, so drop it to a local visual tweak).
     return { scope: 'local', axis, reason: '用户明确只改选中的这一处' };
+  }
+  // Whole-deck style preset (科技风/党政风/商务…) → restyle the entire deck.
+  if (stylePreset) {
+    return {
+      scope: 'deck',
+      axis: 'style',
+      styleId: stylePreset,
+      reason: `整册风格（懂 PPT）：套用「${stylePreset}」风格包，统一字体/配色/封面/项目符`,
+    };
+  }
+  // Element-level visual micro-tweak (线粗/居中/字号/间距…) → only the framed node.
+  if (hasVisualTweak) {
+    return { scope: 'local', axis: 'style', reason: '元素级视觉微调 → 仅调整选中处的样式' };
   }
   if (axis === 'color') {
     return {

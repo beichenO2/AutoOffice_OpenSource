@@ -22,15 +22,18 @@
 
 ## 已知阻塞项
 
-无。被 KnowLever R8 依赖：需实现 study-review PDF 模板渲染逻辑。
+无。~~被 KnowLever R8 依赖：需实现 study-review PDF 模板渲染逻辑。~~ **已解除**：`study-review`
+是 8 个已注册 PDF 主题之一（`src/pdf/types.ts` + `html-builder.ts` 学术绿·衬线主题），带契约
+样例 `contracts/examples/pdf-study-review.example.json` + 3 项契约测试；2026-08-02 端到端渲染
+实证通过（KnowLever 自动生成的「深度学习优化方法文献综述」→ 201KB 真 PDF、452 可选字符）。
 
 ## 下一步
 
-1. 实现 study-review PDF 模板渲染（解除 KnowLever R8 阻塞）。
-2. 版本号推进到 1.0.0。
+1. 版本号推进到 1.0.0（6 大 Requirement 均 100%，第 12 轮矢量 WYSIWYG 导出已入库 PR #1）。
 
 ## 更新记录
 
 | 日期 | 更新内容 |
 | --- | --- |
 | 2026-04-29 | 初始创建：从 polaris.json 提取进度信息 |
+| 2026-08-02 | 校正陈旧项：study-review PDF 模板早已实现，端到端渲染实证通过，KnowLever R8 阻塞解除 |
