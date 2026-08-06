@@ -53,8 +53,19 @@ if (!validate(payload)) {
 3. **Example 完整性**：每种格式至少一个标准示例；特殊主题有专属示例。
 4. **向后兼容**：schema 变更遵循 JSON Schema 兼容性原则，新增字段用 optional。
 
+## 跨项目契约
+
+| 契约 | 位置 | 说明 |
+|------|------|------|
+| **Paper-Deepread Ingest** | [KnowLever `PAPER_DEEPREAD_INGEST.md`](../../KnowLever/templates/site-wiki/PAPER_DEEPREAD_INGEST.md) | **多源** raw → transcript → manifest；PDF implemented，audio/video reserved |
+| manifest schema | [KnowLever `schemas/paper-deepread-manifest.schema.json`](../../KnowLever/templates/site-wiki/schemas/paper-deepread-manifest.schema.json) | 逐句 SSoT JSON Schema |
+| ingest state schema | [KnowLever `schemas/paper-deepread-ingest.schema.json`](../../KnowLever/templates/site-wiki/schemas/paper-deepread-ingest.schema.json) | 流水线状态 |
+
+AutoOffice 在本契约中的职责：`to-markdown`（PDF→Markdown，公式乱码时 VLM OCR）；下游 `summarize` / `enrich` / `generate` 为可选。
+
 ## 变更历史
 
 | 日期 | 变更 | 作者 |
 |------|------|------|
+| 2026-08-06 | 增加 Paper-Deepread Ingest 跨项目引用 | cursor-agent |
 | 2026-05-01 | 初始契约建立：5 格式 schema + 6 examples + study-review 支持 | solo-web-b78236eb |
