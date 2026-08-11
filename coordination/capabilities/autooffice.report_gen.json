@@ -2,7 +2,7 @@
   "capability": "autooffice.report_gen",
   "project": "autooffice",
   "status": "ready",
-  "version": "0.4.0",
+  "version": "1.0.0",
   "published_at": "2026-04-10T09:45:00Z",
   "published_by": "proxy-round2-extended",
   "description": "完整报告系统 — 5格式生成 + 内容分析路由 + RAG丰富 + Wiki脚手架 + 批量处理 + 50+去AI规则 + 单调度检测 + 3模板",
@@ -23,5 +23,5 @@
     "http_server": "PolarProcess service autooffice",
     "project_dir": "~/Polarisor/AutoOffice/"
   },
-  "test_status": "249/252 passing (34 files)"
+  "test_status": "650/650 passing (77 files)"
 }

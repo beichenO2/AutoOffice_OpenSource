@@ -77,7 +77,7 @@ export async function llmGenerateDeckSpec(
   try {
     raw = await chatCompletion(
       [{ role: 'system', content: system }, { role: 'user', content: user }],
-      { capability: '1000', temperature: 0.45, maxTokens: 3600 },
+      { temperature: 0.45, maxTokens: 3600 },
     );
   } catch {
     return null;

@@ -2,7 +2,7 @@
 # AutoOffice · Agent 研究预览 —— PolarProcess 托管的辅助服务（非生产）
 #
 # 生命周期由 PolarProcess（服务 id: autooffice-agent-preview）唯一管理，端口由
-# PolarPort 保留分配（固定 3901）→ start/stop/restart 全走 PolarManager，URL 永不漂移。
+# PolarPort 保留分配（固定 3905）→ start/stop/restart 全走 PolarManager，URL 永不漂移。
 # 与生产 autooffice:3900 完全隔离：独立 service id、独立端口、独立 engine home、
 # 真 LLM 编辑（AUTOOFFICE_LLM_EDIT=1）。
 #

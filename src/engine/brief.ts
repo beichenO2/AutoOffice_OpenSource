@@ -178,7 +178,7 @@ async function interpretRequirementViaLlm(input: InterpretInput): Promise<Interp
         content: `Document kind: ${kindLabel}\nUser requirement (zh/en):\n${input.text.trim()}`,
       },
     ],
-    { capability: '1001', temperature: 0.2, maxTokens: 2048 },
+    { temperature: 0.2, maxTokens: 2048 },
   );
 
   const parsed = normalizeLlmPayload(parseLlmJson(raw));

@@ -1,5 +1,5 @@
 export const AUTOOFFICE_NAME = 'autooffice';
-export const AUTOOFFICE_VERSION = '0.4.0';
+export const AUTOOFFICE_VERSION = '1.0.0';
 export const AUTOOFFICE_REPORT_GEN_CAPABILITY = 'autooffice.report_gen';
 
 export {

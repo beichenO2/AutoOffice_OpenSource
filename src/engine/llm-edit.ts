@@ -65,7 +65,7 @@ export async function llmRewriteText(current: string, instruction: string): Prom
   const user = `原文：\n${current || '(空)'}\n\n修改意见：${instruction}\n\n直接输出修改后的文字：`;
   const raw = await chatCompletion(
     [{ role: 'system', content: system }, { role: 'user', content: user }],
-    { capability: '1000', temperature: 0.4, maxTokens: 600 },
+    { temperature: 0.4, maxTokens: 600 },
   );
   const out = stripToLine(raw);
   if (!out) throw new Error('LLM returned empty rewrite');
@@ -209,7 +209,7 @@ export async function llmStyleEdit(
   const user = `元素当前内容：${currentText || '(图片/无文字)'}\n当前 style：${currentStyle || '(无)'}\n修改意见：${instruction}\n输出 JSON：`;
   const raw = await chatCompletion(
     [{ role: 'system', content: system }, { role: 'user', content: user }],
-    { capability: '1000', temperature: 0.2, maxTokens: 300 },
+    { temperature: 0.2, maxTokens: 300 },
   );
   try {
     const s = raw.indexOf('{');
@@ -320,7 +320,7 @@ export async function llmUnifyDeckText(
     const user = `整册文字节点：\n${list}\n\n统一性意见：${instruction}\n\n输出 JSON：`;
     return chatCompletion(
       [{ role: 'system', content: system }, { role: 'user', content: user }],
-      { capability: '1000', temperature: forceful ? 0.6 : 0.4, maxTokens: 2000 },
+      { temperature: forceful ? 0.6 : 0.4, maxTokens: 2000 },
     );
   };
 
@@ -341,7 +341,7 @@ export async function llmPickImageColor(
   const user = `当前图标题：${currentLabel}\n用户意见：${instruction}\n给出配色 JSON：`;
   const raw = await chatCompletion(
     [{ role: 'system', content: system }, { role: 'user', content: user }],
-    { capability: '1000', temperature: 0.5, maxTokens: 120 },
+    { temperature: 0.5, maxTokens: 120 },
   );
   const hex = /#([0-9a-fA-F]{6})/.exec(raw)?.[0] ?? '#3a63e8';
   const label = /"label"\s*:\s*"([^"]{1,12})"/.exec(raw)?.[1]?.trim() || currentLabel;

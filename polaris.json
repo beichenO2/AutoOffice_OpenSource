@@ -7,7 +7,7 @@
   "description": "多格式自动化报告生成平台（PPT、PDF、Word、LaTeX、LaTeX-PDF、HTML），含去AI化、摘要、RAG 增强、质量分析",
   "tier": "app",
   "status": "active",
-  "version": "0.4.0",
+  "version": "1.0.0",
   "requirements": [
     {
       "id": "R1",
