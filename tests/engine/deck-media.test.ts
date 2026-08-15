@@ -6,7 +6,7 @@
  * images fell back to the shrunk-thumbnail rule.
  */
 import { describe, it, expect } from 'vitest';
-import { imageAspect, renderSlidesMd, previewHtmlFromSlidesMd } from '../../src/engine/slidev/generate.js';
+import { imageAspect, renderSlidesMd, previewHtmlFromSlidesMd, splitSlidevPages } from '../../src/engine/slidev/generate.js';
 import type { DeckSpec } from '../../src/engine/html/generate.js';
 
 const svg = (w: number, h: number, viewBoxOnly = false): string => {
@@ -142,35 +142,43 @@ describe('renderSlidesMd — data-ao-dense (density-adaptive figure sizing)', ()
     ).toContain('data-ao-dense="1"');
   });
 
-  it('never marks density without the two-column media layout (needs an image)', () => {
-    // a text-only slide (no image) has no media column, so no density either
+  it('can mark a text-only slide dense when the copy is heavy (no image required)', () => {
+    // text-only still has no two-column media layout
     expect(renderSlidesMd(deckWith(null, { bulletCount: 8 }))).not.toContain('data-ao-media');
-    expect(renderSlidesMd(deckWith(null, { bulletCount: 8 }))).not.toContain('data-ao-dense');
+    // but heavy copy (8 bullets) now trips density — same line-count gate as figure slides
+    expect(renderSlidesMd(deckWith(null, { bulletCount: 8 }))).toContain('data-ao-dense="1"');
   });
 });
 
-describe('renderSlidesMd — ultra-dense auto-condense (文案自动精简)', () => {
-  it('condenses copy on an over-dense slide so it fits', () => {
-    // many long bullets overflow even the float+reflow layout → auto-trim each
+describe('renderSlidesMd — ultra-dense paginate (换行+分主题分页)', () => {
+  it('paginates an over-dense slide instead of ellipsis-condensing', () => {
+    // many long bullets overflow the column → wrap + extra pages, never trim with …
     const md = renderSlidesMd(deckWith(svg(1000, 420), { bulletCount: 6, bulletText: LONG_BULLET }));
-    expect(md).toContain('data-ao-dense="1"'); // still the dense (float) layout
-    expect(md).not.toContain(LONG_BULLET); // the full long text is no longer present verbatim
-    expect(md).toContain('…'); // trimmed with an ellipsis
+    const pages = splitSlidevPages(md);
+    expect(pages.length).toBeGreaterThanOrEqual(2);
+    expect(md).toContain('data-ao-dense="1"');
+    expect(md.split(LONG_BULLET).length - 1).toBe(6);
+    expect(md).not.toMatch(/…<\/(?:li|p)>/);
+    expect(pages.filter((p) => /<img\b/.test(p))).toHaveLength(1);
   });
 
   it('leaves a merely-dense slide (a few long bullets) full text — only tightens the type', () => {
     // 4 long bullets beside a TALL figure (wide left column) fit once tightened, so the
-    // copy is kept intact — dense (tightened) but not condensed
+    // copy is kept intact on one page — dense (tightened) but not paginated
     const md = renderSlidesMd(deckWith(svg(460, 1100), { bulletCount: 4, bulletText: LONG_BULLET }));
+    expect(splitSlidevPages(md)).toHaveLength(1);
     expect(md).toContain('data-ao-dense="1"');
-    expect(md).toContain(LONG_BULLET); // text preserved intact
+    expect(md).toContain(LONG_BULLET);
+    expect(md).not.toMatch(/…<\/(?:li|p)>/);
   });
 
-  it('never condenses a light slide', () => {
+  it('never paginates or ellipsizes a light slide', () => {
     // 2 long bullets beside a TALL figure (wide text column) is genuinely light → untouched
     const md = renderSlidesMd(deckWith(svg(460, 1100), { bulletCount: 2, bulletText: LONG_BULLET }));
+    expect(splitSlidevPages(md)).toHaveLength(1);
     expect(md).not.toContain('data-ao-dense');
     expect(md).toContain(LONG_BULLET);
+    expect(md).not.toMatch(/…<\/(?:li|p)>/);
   });
 });
 

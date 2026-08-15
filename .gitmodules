@@ -1,0 +1,4 @@
+[submodule "vendor/scientific-illustrator"]
+	path = vendor/scientific-illustrator
+	url = https://github.com/icebird1998/scientific-illustrator.git
+	ignore = untracked

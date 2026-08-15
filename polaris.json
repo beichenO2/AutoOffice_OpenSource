@@ -2,9 +2,9 @@
   "name": "AutoOffice",
   "_meta": {
     "schema_version": "1.0",
-    "last_synced_at": "2026-07-17T00:06:00+08:00"
+    "last_synced_at": "2026-08-15T18:30:00+08:00"
   },
-  "description": "多格式自动化报告生成平台（PPT、PDF、Word、LaTeX、LaTeX-PDF、HTML），含去AI化、摘要、RAG 增强、质量分析",
+  "description": "AI 文档 IDE（aoide）+ 多格式自动化报告生成平台（PPT、PDF、Word、LaTeX、LaTeX-PDF、HTML）；Slidev 密文走换行+分页，含去AI化、摘要、RAG 增强、质量分析",
   "tier": "app",
   "status": "active",
   "version": "1.0.0",
@@ -334,7 +334,7 @@
             "GET /api/lobster/test"
           ],
           "behavior": [
-            "错误路径（API 5xx、CLI 非 0、theme 校验失败）自动写入 lobster-events.jsonl",
+            "错误路径（API 5xx、CLI 非 0、theme 校验失败）自动写入 logs/lobster/events.jsonl（轮转片最多保留 5 个）",
             "事件 schema 对齐 SOTAgent 统一定义：{ts, type, source_project, target_project?, severity, payload, dedup_key}",
             "status adapter 返回项目版本、运行时间、最近事件摘要",
             "health adapter 返回错误计数和最近错误详情",

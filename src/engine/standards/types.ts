@@ -160,9 +160,15 @@ export interface DocumentElementFact {
   nodeId: string;
   type: string;
   page: number;
+  /** Nearest ancestor `[data-ao-id]` (ul→slide, li→ul). Used to skip nested overlap. */
+  parentId?: string;
   textLength?: number;
   fontPt?: number;
   boxNorm?: DocumentElementBox;
+  /** Measured rendered-text bbox in the same normalized space as `boxNorm`. */
+  contentBoxNorm?: DocumentElementBox;
+  /** Playwright: element scrollWidth/Height exceeds its client box. */
+  scrollOverflow?: boolean;
   hasCaption?: boolean;
 }
 

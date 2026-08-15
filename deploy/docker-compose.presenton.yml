@@ -1,0 +1,43 @@
+# Optional Presenton sidecar — not on the default AutoOffice path.
+# AutoOffice talks to it via PRESENTON_URL (default http://127.0.0.1:5000).
+#
+# Pin: presenton/presenton @ b8426281ffd00708bab2974466ecb7c0dc43aed3
+#
+# Option A — local clone (gitignored at repo-root presenton-upstream/):
+#   git clone https://github.com/presenton/presenton.git presenton-upstream
+#   git -C presenton-upstream checkout b8426281ffd00708bab2974466ecb7c0dc43aed3
+#
+# Option B — published image (uncomment `image:` and comment `build:`):
+#   image: ghcr.io/presenton/presenton:latest
+#
+# Paths are relative to this file (deploy/).
+# Persistent run must go through PolarProcess; do not `docker compose up` by hand.
+
+services:
+  presenton:
+    build:
+      context: ../presenton-upstream
+      dockerfile: Dockerfile.arm64
+    # image: ghcr.io/presenton/presenton:latest
+    ports:
+      - "${PRESENTON_PORT:-5000}:80"
+    volumes:
+      - ../presenton-data:/app_data
+    environment:
+      - MIGRATE_DATABASE_ON_STARTUP=true
+      - CAN_CHANGE_KEYS=true
+      - LLM=ollama
+      - OLLAMA_URL=http://host.docker.internal:11434
+      - OLLAMA_MODEL=gemma3:4b
+      - START_OLLAMA=false
+      - DISABLE_IMAGE_GENERATION=true
+      - DISABLE_THINKING=true
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/api/v1/ppt/presentation/all"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s

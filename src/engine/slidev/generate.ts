@@ -19,6 +19,14 @@ import {
   type SlideElementSpec,
   type SlideSpec,
 } from '../html/generate.js';
+import { fitPreviewHtml } from '../text-fit.js';
+import {
+  estimateBodyLines,
+  paginateDeckSpec,
+  type DensityMode,
+} from '../paginate.js';
+
+export { paginateDeckSpec } from '../paginate.js';
 
 export const SLIDES_MD = 'slides.md';
 export const STYLES_PATH = 'styles/index.css';
@@ -170,104 +178,20 @@ export function imageAspect(src: string | undefined): number | null {
   return svgAspect(src) ?? rasterAspect(src);
 }
 
-/** True for glyphs that take a full em (CJK, fullwidth forms, Hangul…). */
-function isFullWidthCode(c: number): boolean {
-  return (
-    (c >= 0x1100 && c <= 0x115f) || // Hangul Jamo
-    (c >= 0x2e80 && c <= 0xa4cf) || // CJK radicals … Yi
-    (c >= 0xac00 && c <= 0xd7a3) || // Hangul syllables
-    (c >= 0xf900 && c <= 0xfaff) || // CJK compatibility ideographs
-    (c >= 0xfe30 && c <= 0xfe4f) || // CJK compatibility forms
-    (c >= 0xff00 && c <= 0xff60) || // fullwidth forms
-    (c >= 0xffe0 && c <= 0xffe6) || // fullwidth signs
-    (c >= 0x20000 && c <= 0x3fffd) // CJK extension B+
-  );
+/** Column mode from the slide figure (text-only → `full`). */
+function slideDensityMode(spec: SlideSpec): DensityMode {
+  const imageEl = spec.elements.find((e) => e.type === 'image');
+  if (!imageEl) return 'full';
+  const ar = imageAspect(imageEl.src);
+  return ar == null ? 'square' : ar <= 0.9 ? 'tall' : ar < 1.4 ? 'square' : 'wide';
 }
 
 /**
- * Approx rendered advance width (px at the 1280 box-measure viewport) of a string in
- * the body/bullet font: full-width glyphs ≈ 26px, everything else (Latin, digits,
- * spaces, `**`/`$` markers) ≈ 13px. Only used to estimate how many lines the copy
- * wraps to when picking the figure density / condensing an over-dense slide.
+ * Moderate density: tighten type (`data-ao-dense`). Ultra overflow is handled
+ * upstream by {@link paginateDeckSpec} — this path never truncates with `…`.
  */
-function textAdvancePx(s: string): number {
-  let w = 0;
-  for (const ch of s) w += isFullWidthCode(ch.codePointAt(0)!) ? 26 : 13;
-  return w;
-}
-
-/** Weighted length in "units" (full-width glyph = 2, else 1) — a font-agnostic proxy
- *  for how much horizontal room a string needs, used to budget condensation. */
-function textUnits(s: string): number {
-  let u = 0;
-  for (const ch of s) u += isFullWidthCode(ch.codePointAt(0)!) ? 2 : 1;
-  return u;
-}
-
-/** Keep `**bold**` / `$…$` markers balanced after a mid-string cut (a dangling
- *  opener would otherwise swallow the rest of the deck or render literal markup). */
-function balanceInlineMarkers(s: string): string {
-  let out = s;
-  if ((out.match(/\*\*/g) ?? []).length % 2 === 1) out = out.replace(/\s*\*\*\s*\S*$/, '').trimEnd();
-  if ((out.match(/\$/g) ?? []).length % 2 === 1) out = out.replace(/\$[^$]*$/, '').trimEnd();
-  return out;
-}
-
-/**
- * Condense one run of copy to roughly `maxUnits` wide, preferring a natural break so
- * the result still reads as a whole thought: cut at the last sentence terminator in
- * range, else the last clause boundary (+ …), else a hard cap (+ …). Used only to
- * auto-trim genuinely over-dense slides (会话 §20.9) where even the float+reflow
- * layout would clip; light copy is returned unchanged.
- */
-function condenseText(text: string, maxUnits: number): string {
-  const t = text.trim();
-  if (textUnits(t) <= maxUnits) return t;
-  const chars = [...t];
-  const minUnits = maxUnits * 0.45; // don't cut so early the point is lost
-  let acc = 0;
-  let hardCut = chars.length;
-  let sentEnd = -1;
-  let clauseEnd = -1;
-  for (let i = 0; i < chars.length; i++) {
-    acc += isFullWidthCode(chars[i]!.codePointAt(0)!) ? 2 : 1;
-    const ch = chars[i]!;
-    if (acc >= minUnits && acc <= maxUnits) {
-      if ('。！？!?；;'.includes(ch) || (ch === '.' && !/\d/.test(chars[i + 1] ?? ''))) sentEnd = i;
-      else if ('，、,—…)）'.includes(ch)) clauseEnd = i;
-    }
-    if (acc > maxUnits) {
-      hardCut = i;
-      break;
-    }
-  }
-  if (sentEnd >= 0) return balanceInlineMarkers(chars.slice(0, sentEnd + 1).join('').trim());
-  const at = clauseEnd >= 0 ? clauseEnd + 1 : hardCut;
-  const head = balanceInlineMarkers(chars.slice(0, at).join('').replace(/[，、,—…\s]+$/u, '').trim());
-  return head + '…';
-}
-
-/**
- * Estimate how many text lines the slide copy wraps to inside the *sparse* (big
- * full-height figure) two-column layout, whose text column width depends on the media
- * mode (tall figure → widest copy column, wide figure → narrowest). This is the
- * signal for figure density: a tall screenshot with light copy stays under the
- * threshold (keeps the big figure), while a genuinely text-heavy slide — many bullets
- * OR a few long ones, like a real GLM slide — trips it and floats a shorter figure so
- * the copy reflows. Calibrated against measured overflow (see 会话 §20.7).
- */
-function estimateBodyLines(spec: SlideSpec, mode: 'tall' | 'square' | 'wide'): number {
-  const colPx = mode === 'tall' ? 600 : mode === 'wide' ? 370 : 498;
-  let lines = 0;
-  for (const e of spec.elements) {
-    if (e.type === 'bullet' || e.type === 'paragraph' || e.type === 'subheading') {
-      lines += Math.max(1, Math.ceil(textAdvancePx(e.text ?? '') / colPx));
-      if (e.type === 'paragraph') lines += 1; // lead callout block padding overhead
-    } else if (e.type === 'formula') {
-      lines += 2; // a display formula block is roughly two lines tall
-    }
-  }
-  return lines;
+function applyCopyDensity(spec: SlideSpec, mode: DensityMode): { dense: boolean; workSpec: SlideSpec } {
+  return { dense: estimateBodyLines(spec, mode) > 6, workSpec: spec };
 }
 
 /** One Slidev slide page — HTML fragment with ao ids (no outer document). */
@@ -285,46 +209,27 @@ function renderSlideMarkdownBody(spec: SlideSpec, index: number): string {
   // (guaranteed gutter → it never collides with the figure). `data-ao-media` (from the
   // image aspect) picks the column widths.
   //
-  // Density is handled *on the copy*, not the figure: if the copy is too tall for its
-  // left column, first tighten the type (`data-ao-dense` = smaller font + leading), and
-  // only if it *still* won't fit, auto-condense each block to a natural break so it fits
-  // ("字多就删减/换行，不撞图"; 会话 §20.10). Thresholds are estimated wrapped-line
-  // counts in the left column, calibrated against measured overflow.
+  // Density is handled *on the copy*, not the figure, and is orthogonal to media:
+  // text-only slides use the same measure-ladder (estimate wrap → `data-ao-dense`
+  // tighten type). Ultra-dense copy is paginated *before* this render
+  // (`paginateDeckSpec`: wrap + 分主题分页) so this path never ellipsizes body text.
   const imageEl = spec.elements.find((e) => e.type === 'image');
   const specBullets = spec.elements.filter((e) => e.type === 'bullet').length;
   const leadBlocks = spec.elements.filter(
     (e) => e.type === 'paragraph' || e.type === 'subheading' || e.type === 'formula',
   ).length;
   const hasText = specBullets > 0 || leadBlocks > 0;
-  let mediaAttr = '';
-  let dense = false;
-  let mode: 'tall' | 'square' | 'wide' = 'square';
+  let slideAttrs = '';
   let workSpec = spec;
-  if (layout !== 'title' && imageEl && hasText) {
-    const ar = imageAspect(imageEl.src);
-    mode = ar == null ? 'square' : ar <= 0.9 ? 'tall' : ar < 1.4 ? 'square' : 'wide';
-    const lines = estimateBodyLines(spec, mode);
-    dense = lines > 6; // won't comfortably fit the left column at full size → tighten type
-    if (lines > 9) {
-      // even tightened it overflows → condense each block to the column's capacity,
-      // trimming as gently as possible (start ~4 lines/block, tighten only until it fits)
-      const colUnits = (mode === 'tall' ? 600 : mode === 'wide' ? 370 : 498) / 13;
-      const condenseAll = (u: number): SlideSpec => ({
-        ...spec,
-        elements: spec.elements.map((e) =>
-          (e.type === 'bullet' || e.type === 'paragraph') && e.text
-            ? { ...e, text: condenseText(e.text, Math.round(e.type === 'paragraph' ? u * 1.4 : u)) }
-            : e,
-        ),
-      });
-      let maxUnits = Math.round(colUnits * 4);
-      workSpec = condenseAll(maxUnits);
-      while (estimateBodyLines(workSpec, mode) > 8 && maxUnits > colUnits * 0.6) {
-        maxUnits -= Math.max(6, Math.round(colUnits * 0.4));
-        workSpec = condenseAll(maxUnits);
-      }
+  if (layout !== 'title' && hasText) {
+    let mode: DensityMode = 'full';
+    if (imageEl) {
+      mode = slideDensityMode(spec);
+      slideAttrs += ` data-ao-media="${mode}"`;
     }
-    mediaAttr = ` data-ao-media="${mode}"${dense ? ' data-ao-dense="1"' : ''}`;
+    const { dense, workSpec: next } = applyCopyDensity(spec, mode);
+    workSpec = next;
+    if (dense) slideAttrs += ' data-ao-dense="1"';
   }
 
   const bullets = workSpec.elements.filter((e) => e.type === 'bullet');
@@ -350,7 +255,7 @@ function renderSlideMarkdownBody(spec: SlideSpec, index: number): string {
     );
   }
   return [
-    `<div class="ao-slide" data-ao-id="${slideId}" data-ao-type="slide" data-ao-page="${page}" data-ao-layout="${layout}"${mediaAttr}>`,
+    `<div class="ao-slide" data-ao-id="${slideId}" data-ao-type="slide" data-ao-page="${page}" data-ao-layout="${layout}"${slideAttrs}>`,
     parts.join('\n'),
     `</div>`,
   ].join('\n');
@@ -374,7 +279,8 @@ export function renderSlidesMd(deck: DeckSpec): string {
     '',
   ].join('\n');
 
-  const pages = deck.slides.map((s, i) => renderSlideMarkdownBody(s, i));
+  const paged = paginateDeckSpec(deck, { densityMode: slideDensityMode });
+  const pages = paged.slides.map((s, i) => renderSlideMarkdownBody(s, i));
   return frontmatter + pages.join('\n\n---\n\n') + '\n';
 }
 
@@ -443,7 +349,7 @@ body[data-ao-deck]{
 .ao-slide{
   position:relative;width:100vw;height:56.25vw;margin:0 auto 2.6vw;
   padding:6.6vw 7.4vw 6.4vw;background:#fbfcfe;color:#1b2233;overflow:hidden;
-  display:flex;flex-direction:column;
+  display:flex;flex-direction:column;--ao-body-font:2.3vw;--ao-title-font:3.5vw;
   box-shadow:0 1.6vw 3.6vw rgba(20,28,56,.14), 0 .3vw .8vw rgba(20,28,56,.07);
 }
 .ao-el{outline:none;}
@@ -463,7 +369,7 @@ body[data-ao-deck]{
   font-variant-numeric:tabular-nums;}
 
 /* ---- cover / title slide: deep branded background with layered depth ---- */
-.ao-slide[data-ao-layout="title"]{justify-content:center;padding:6.6vw 8vw;color:#f4f7ff;
+.ao-slide[data-ao-layout="title"]{justify-content:center;padding:6.6vw 8vw;color:#f4f7ff;--ao-title-font:6.2vw;
   background:
     radial-gradient(120% 130% at 82% 8%, rgba(122,154,252,.30), rgba(122,154,252,0) 46%),
     radial-gradient(100% 120% at 0% 106%, rgba(46,74,140,.55), rgba(46,74,140,0) 52%),
@@ -533,7 +439,7 @@ img.ao-el{max-width:100%;border-radius:1vw;box-shadow:0 1vw 2.4vw rgba(20,28,56,
    layout. The figure is the soul of the slide, so it stays big and prominent (never
    shrinks to a corner or floats under the copy). The copy is width-capped to its own
    left column, guaranteeing a gap so it never collides with the figure; when the copy
-   is too long the renderer condenses it to fit (会话 §20.10) rather than shrinking the
+   is too long the deck paginates (wrap + extra pages) rather than shrinking the
    figure. Absolute positioning keeps the flat DOM / data-ao-id box-select contract. */
 /* the copy column is vertically centred so it sits on the same midline as the figure —
    a balanced split (symmetric whitespace) instead of top-heavy copy + a lonely centred
@@ -556,16 +462,25 @@ img.ao-el{max-width:100%;border-radius:1vw;box-shadow:0 1vw 2.4vw rgba(20,28,56,
 .ao-slide[data-ao-media] li.ao-el{font-size:2.05vw;line-height:1.44;padding-left:3.1vw;}
 .ao-slide[data-ao-media] li.ao-el::before{top:.44vw;width:1.16vw;height:1.16vw;}
 
-/* ---- text-dense figure slide (data-ao-dense) ----
-   The figure STAYS big + centred (it's the soul); only the copy tightens — smaller
-   type, tighter leading and gaps — so more of it fits the left column before the
-   renderer has to condense it (会话 §20.10). No float, no reflow under the figure, so
-   the copy never collides with it. */
-.ao-slide[data-ao-media][data-ao-dense] > ul.ao-el{gap:0.95vw;}
-.ao-slide[data-ao-media][data-ao-dense] li.ao-el{font-size:1.9vw;line-height:1.32;}
-.ao-slide[data-ao-media][data-ao-dense] li.ao-el::before{top:.34vw;}
-.ao-slide[data-ao-media][data-ao-dense] > p.ao-el{font-size:1.8vw;line-height:1.46;margin:0 0 1.5vw;}
-.ao-slide[data-ao-media][data-ao-dense] > h2.ao-el{font-size:2.2vw;margin:0 0 1vw;}
+/* ---- text-dense slide (data-ao-dense) ----
+   Tightens type on ANY content slide whose copy is too tall — figure slides and
+   text-only alike. Does not require [data-ao-media]. The figure (when present)
+   STAYS big + centred; only the copy tightens — smaller type, tighter leading
+   and gaps — so a merely-dense page still reads. Ultra overflow paginates
+   instead of truncating. Media-specific column caps stay on [data-ao-media];
+   academic pack keeps a readability floor on [data-ao-media][data-ao-dense]. */
+.ao-slide[data-ao-dense] > ul.ao-el{gap:0.95vw;}
+.ao-slide[data-ao-dense] li.ao-el{font-size:1.9vw;line-height:1.32;}
+.ao-slide[data-ao-dense] li.ao-el::before{top:.34vw;}
+.ao-slide[data-ao-dense] > p.ao-el{font-size:1.8vw;line-height:1.46;margin:0 0 1.5vw;}
+.ao-slide[data-ao-dense] > h2.ao-el{font-size:2.2vw;margin:0 0 1vw;}
+/* measure-and-shrink fit: Playwright overflow ladder stamps --ao-body-font +
+   data-ao-fit when dense type still clips. Floor ~1.5vw (≈18px @ 1280). */
+.ao-slide[data-ao-fit] li.ao-el{font-size:var(--ao-body-font,1.5vw);}
+.ao-slide[data-ao-fit] > p.ao-el{font-size:var(--ao-body-font,1.5vw);}
+.ao-slide[data-ao-fit] > h2.ao-el{font-size:var(--ao-body-font,1.5vw);}
+.ao-slide[data-ao-fit] > h1.ao-el,
+.ao-slide[data-ao-fit] h1.ao-el{font-size:var(--ao-title-font,3.5vw) !important;line-height:1.2;}
 `.trim();
 
 /**
@@ -874,4 +789,23 @@ export function previewHtmlFromSource(source: SourceFile[]): string {
   const legacy = source.find((f) => f.path === 'deck.html')?.content;
   if (legacy) return legacy;
   return renderDeckHtml({ title: 'Empty', slides: [] });
+}
+
+/**
+ * Same as {@link previewHtmlFromSlidesMd}, then persist the measure-and-shrink
+ * ladder (`data-ao-fit` + `--ao-body-font`) so /aoide preview matches export.
+ * Playwright when Chromium is available; heuristic ladder otherwise.
+ */
+export async function previewHtmlFittedFromSlidesMd(
+  md: string,
+  title = 'Slidev preview',
+): Promise<string> {
+  const { html } = await fitPreviewHtml(previewHtmlFromSlidesMd(md, title));
+  return html;
+}
+
+/** Async preview from source files with fit baked in (Chromium or heuristic). */
+export async function previewHtmlFittedFromSource(source: SourceFile[]): Promise<string> {
+  const { html } = await fitPreviewHtml(previewHtmlFromSource(source));
+  return html;
 }

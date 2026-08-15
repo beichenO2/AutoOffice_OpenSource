@@ -1,0 +1,29 @@
+{
+  "mcpServers": {
+    "ao-drawio-live": {
+      "command": "node",
+      "args": ["./scripts/live-server.mjs"],
+      "cwd": "~/Polarisor/AutoOffice/vendor/scientific-illustrator/plugins/scientific-illustrator",
+      "env": {
+        "DRAWIO_PATH": "/Applications/draw.io.app/Contents/MacOS/draw.io",
+        "DRAWIO_LIVE_PORT": "9330"
+      }
+    },
+    "ao-drawio-files": {
+      "command": "node",
+      "args": ["./scripts/server.mjs"],
+      "cwd": "~/Polarisor/AutoOffice/vendor/scientific-illustrator/plugins/scientific-illustrator",
+      "env": {
+        "DRAWIO_PATH": "/Applications/draw.io.app/Contents/MacOS/draw.io"
+      }
+    },
+    "ao-powerpoint-live": {
+      "command": "node",
+      "args": ["./scripts/powerpoint-server.mjs"],
+      "cwd": "~/Polarisor/AutoOffice/vendor/scientific-illustrator/plugins/scientific-illustrator",
+      "env": {
+        "SCIENTIFIC_ILLUSTRATOR_FOCUS_POLICY": "preserve"
+      }
+    }
+  }
+}

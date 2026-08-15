@@ -31,6 +31,12 @@
 | 矢量 WYSIWYG 导出 | 已入库 | 默认 PDF 为 Chromium 矢量打印预览 HTML；`?clicks=1` 位图分步；PPTX 位图满幅 |
 | 数据严谨校验（grounding） | 已入库 | 百分比/小数/多位数回查 research/guidance（个位数/公式/图片豁免，字符串包含性核查） |
 | Electron 桌面应用 | 已入库 | `npm run app` / `npm run app:dist`（产物在 `release/`） |
+| 文字预算 6/80/280 | 已入库 | 内容页 ≤6 要点、要点 ≤80 CJK、段落 ≤280 CJK（`src/engine/text-budget.ts`） |
+| 密文分页（wrap + 分主题） | 已入库 | `paginateDeckSpec`：换行 + 主题/行预算拆页，续页标题 `（2/N）`；Slidev 路径不用省略号截断正文 |
+| text-fit ladder | 已入库 | 预览实测溢出后下调 `--ao-body-font` 至可读下限（`src/engine/text-fit.ts`） |
+| text-layout audit | 已入库 | `auditTextLayout`：重叠/溢出/过密框的标准预检 |
+| 可编辑 PPTX（opt-in） | 已入库 | 默认仍是满幅位图；`AUTOOFFICE_PPTX_EDITABLE=1` 走原生文本框 |
+| scientific-illustrator pin | 已入库 | `vendor/scientific-illustrator` submodule（v1.5.4）；wrap 在 `integrations/scientific-illustrator/` |
 
 ## 已知阻塞项
 
@@ -44,14 +50,16 @@
 1. 为 aoide 引擎在 `polaris.json` 立正式 Requirement（能力已入库，SSoT 尚未建档）。
 2. 风格包版式模板化：五个包的版式差异目前全部由 `DECK_STYLE_PACKS` 的 CSS 选择器覆写实现，
    gov / business 的覆写链最长最脆；考虑在生成器层引入真正的版式模板而非层层覆写。
-3. 手动插图进入两栏布局的 renderer 硬化：插入位置与文字列的碰撞边界补测试。
+3. 手动插图进入两栏布局的 renderer 硬化：插入位置与文字列的碰撞边界补测试（annotate flake）。
 4. `rasterAspect` 覆盖面：目前只能从 `data:` URI 的 PNG/GIF/JPEG 头读出长宽比，
    http(s) 引用图一律回落到均分栏；补远程图尺寸探测后两栏分档才算准。
-5. 导出路径保持收敛在矢量 WYSIWYG 主线（PR #1 演进线），不再新增第二套渲染实现。
+5. 导出主线仍是矢量 WYSIWYG；可编辑 PPTX 已是 opt-in 双轨，不要再为预览另写一套渲染。
 6. 清理三个 Python 桥死代码（`src/pdf/run-weasyprint.ts`、`src/docx/run-python-docx.ts`、
    `src/ppt/run-python-pptx.ts`——仅 `src/index.ts` 导出、无调用方）。注意 `tools/latexgen/
    build_latex.py` 仍被报告线 LaTeX 适配器活跃调用（`src/latex/run-xelatex.ts:101`），不在
    清理范围；后续应将其收敛为 TS 直出（aoide 引擎线已是 TS 直出 .tex）。
+7. Phase 4：已完成 `git filter-repo`（剔除 `presenton-upstream/`、`lobster-events*.jsonl`、`.planning/hub/hub.sqlite*`）；本地 `.git` ≈105M；`main` 已 force-push。
+8. e2e 双结果硬化：框选/导出路径对「预览 HTML vs 导出产物」对齐补测，减少双结局 flake。
 
 ## 更新记录
 
@@ -60,3 +68,4 @@
 | 2026-04-29 | 初始创建：从 polaris.json 提取进度信息 |
 | 2026-08-02 | 校正陈旧项：study-review PDF 模板早已实现，端到端渲染实证通过，KnowLever R8 阻塞解除 |
 | 2026-08-11 | 重心校准：aoide 引擎整线入库并列表化，版本推进到 1.0.0，下一步改为 1.0 后展望 |
+| 2026-08-15 | 文字布局：6/80/280 预算 + `paginateDeckSpec` 密文分页 + text-fit / audit；可编辑 PPTX opt-in；sci-illustrator pin；Presenton 出库改 `deploy/`；lobster → `logs/lobster/` |

@@ -28,7 +28,7 @@ import {
 } from './llm-edit.js';
 import { emitEvent, listEvents } from './events.js';
 import { assertValid, annotationCreateSchema, editIntentSchema, imageInsertSchema } from './schema.js';
-import type { AgentTask, Annotation, Project, Revision, SourceBox } from './types.js';
+import type { AgentTask, Annotation, Project, Revision, SourceBox, SourceFile, SourceMap } from './types.js';
 import { buildDeckBoxes, buildPdfBoxes, buildSlidevDeckBoxes, pageCountOf, presentationMeasureHtml } from './boxmap.js';
 import {
   runRequirementPipeline,
@@ -41,11 +41,12 @@ import {
 } from './orchestrator.js';
 import { isHighConfidence } from './html/hit-test.js';
 import { newTask, transitionTask } from './task-state.js';
-import { exportDeckPdfVector, exportDeckPdfWysiwyg, exportDeckPptxWysiwyg, measureDeckBoxes } from './render/deck.js';
+import { exportDeckPdfVector, exportDeckPdfWysiwyg, exportDeckPptxWysiwyg } from './render/deck.js';
+import { runTextLayoutPreflight } from './standards/preflight.js';
+import { deckSpecFromAoHtml, isEditablePptxExportEnabled, renderEditablePptx } from './export/editable-pptx.js';
 import { pptSourceOfTruth } from './config.js';
 import {
   SLIDES_MD,
-  previewHtmlFromSource,
   renderSlidevSource,
   applySlidevEditIntent,
   insertImageIntoSlideMarkdown,
@@ -61,7 +62,8 @@ import { llmGenerateDeckSpec, fallbackDeckSpec, insertImagesIntoSpec, applyDeckA
 import { demoProfiles } from './standards/fixtures.js';
 import { parseLatexNodes } from './latex/resolver.js';
 import { compileLatexSandbox, cleanupCompileDir, containsPathEscape } from './latex/compile.js';
-import type { SourceMap } from './types.js';
+import { previewHtmlFittedFromSource } from './slidev/generate.js';
+import { fitPreviewHtml, isPreviewFitted } from './text-fit.js';
 
 export class EngineNotFoundError extends Error {
   readonly code = 'not_found';
@@ -116,6 +118,37 @@ export class EngineService {
 
   private deps(): OrchestratorDeps {
     return { repo: this.repo, store: this.store, idFactory: this.idFactory, clock: this.clock };
+  }
+
+  /** Bake Playwright/heuristic text-fit into preview HTML before save/serve. */
+  private async fittedPreviewBuffer(source: SourceFile[]): Promise<Buffer> {
+    return Buffer.from(await previewHtmlFittedFromSource(source), 'utf-8');
+  }
+
+  /**
+   * HTML that export preflights and writes: prefer an already-fitted render
+   * (`PREVIEW_FITTED_ATTR`), otherwise run the fit ladder so preview / gate /
+   * export share the same bytes.
+   */
+  private async htmlForExport(head: Revision): Promise<string> {
+    let html =
+      head.source.find((f) => f.path === 'deck.html')?.content ??
+      presentationMeasureHtml(head.source) ??
+      '';
+
+    if (head.renderMime?.includes('html') && head.renderPath) {
+      try {
+        const renderHtml = (await this.store.readRender(head.renderPath)).toString('utf-8');
+        if (isPreviewFitted(renderHtml)) html = renderHtml;
+      } catch {
+        /* keep source html */
+      }
+    }
+
+    if (html.includes('ao-slide') && !isPreviewFitted(html)) {
+      html = (await fitPreviewHtml(html)).html;
+    }
+    return html;
   }
 
   private requireProject(id: string): Promise<Project> {
@@ -201,7 +234,7 @@ export class EngineService {
     const grounding = verifyDeckGrounding(spec, [research, opts.guidance].filter(Boolean).join('\n'));
 
     const source = renderSlidevSource(spec);
-    const renderBuffer = Buffer.from(previewHtmlFromSource(source), 'utf-8');
+    const renderBuffer = await this.fittedPreviewBuffer(source);
     const boxes = await buildSlidevDeckBoxes(source);
     const revision = buildRevision({
       project,
@@ -512,7 +545,7 @@ export class EngineService {
       throw new EngineValidationError(`Collateral change: ${result.collateral.unexpectedChanged.join(',')}`);
     }
     const nextSource = result.source;
-    const renderBuffer = Buffer.from(previewHtmlFromSource(nextSource), 'utf-8');
+    const renderBuffer = await this.fittedPreviewBuffer(nextSource);
     const boxes = await buildSlidevDeckBoxes(nextSource);
 
     const revision = buildRevision({
@@ -570,7 +603,7 @@ export class EngineService {
     md = setDeckAccentInFrontmatter(recolored.md, hex);
 
     const nextSource = head.source.map((f, i) => (i === mdIdx ? { ...f, content: md } : { ...f }));
-    const renderBuffer = Buffer.from(previewHtmlFromSource(nextSource), 'utf-8');
+    const renderBuffer = await this.fittedPreviewBuffer(nextSource);
     const boxes = await buildSlidevDeckBoxes(nextSource);
     const revision = buildRevision({
       project,
@@ -634,7 +667,7 @@ export class EngineService {
     }
 
     const nextSource = head.source.map((f, i) => (i === mdIdx ? { ...f, content: md } : { ...f }));
-    const renderBuffer = Buffer.from(previewHtmlFromSource(nextSource), 'utf-8');
+    const renderBuffer = await this.fittedPreviewBuffer(nextSource);
     const boxes = await buildSlidevDeckBoxes(nextSource);
     const revision = buildRevision({
       project,
@@ -723,7 +756,7 @@ export class EngineService {
       throw new EngineValidationError(`Collateral change: ${result.collateral.unexpectedChanged.join(',')}`);
     }
     const nextSource = result.source;
-    const renderBuffer = Buffer.from(previewHtmlFromSource(nextSource), 'utf-8');
+    const renderBuffer = await this.fittedPreviewBuffer(nextSource);
     const boxes = await buildSlidevDeckBoxes(nextSource);
     const revision = buildRevision({
       project,
@@ -775,7 +808,7 @@ export class EngineService {
 
     const md = setDeckStyleInFrontmatter(head.source[mdIdx]!.content, styleId);
     const nextSource = head.source.map((f, i) => (i === mdIdx ? { ...f, content: md } : { ...f }));
-    const renderBuffer = Buffer.from(previewHtmlFromSource(nextSource), 'utf-8');
+    const renderBuffer = await this.fittedPreviewBuffer(nextSource);
     const boxes = await buildSlidevDeckBoxes(nextSource);
     const revision = buildRevision({
       project,
@@ -870,7 +903,7 @@ export class EngineService {
       throw new EngineValidationError(`Collateral change: ${result.collateral.unexpectedChanged.join(',')}`);
     }
     const nextSource = result.source;
-    const renderBuffer = Buffer.from(previewHtmlFromSource(nextSource), 'utf-8');
+    const renderBuffer = await this.fittedPreviewBuffer(nextSource);
     const boxes = await buildSlidevDeckBoxes(nextSource);
     const revision = buildRevision({
       project,
@@ -946,7 +979,7 @@ export class EngineService {
     const nextSource = head.source.map((f) => (f.path === SLIDES_MD ? { ...f, content: newMd } : { ...f }));
 
     const { repo, store, idFactory, clock } = this.deps();
-    const renderBuffer = Buffer.from(previewHtmlFromSource(nextSource), 'utf-8');
+    const renderBuffer = await this.fittedPreviewBuffer(nextSource);
     const boxes = await buildSlidevDeckBoxes(nextSource);
     const revision = buildRevision({
       project,
@@ -1113,10 +1146,20 @@ export class EngineService {
   async getRevisionRender(revisionId: string) {
     const rev = await this.repo.getRevision(revisionId);
     if (!rev?.renderPath) throw new EngineNotFoundError('Revision render not found');
-    return {
-      buffer: await this.store.readRender(rev.renderPath),
-      mime: rev.renderMime ?? 'application/octet-stream',
-    };
+    const mime = rev.renderMime ?? 'application/octet-stream';
+    let buffer = await this.store.readRender(rev.renderPath);
+    if (mime.includes('html')) {
+      const html = buffer.toString('utf-8');
+      if (html.includes('ao-slide') && !isPreviewFitted(html)) {
+        const fitted = await fitPreviewHtml(html);
+        buffer = Buffer.from(fitted.html, 'utf-8');
+        const name = rev.renderPath.split(/[/\\]/).pop();
+        if (name) {
+          await this.store.writeRender(rev.projectId, name, buffer).catch(() => {});
+        }
+      }
+    }
+    return { buffer, mime };
   }
 
   /** Labelled box map for a revision. `page <= 0` returns every page. */
@@ -1141,7 +1184,11 @@ export class EngineService {
     };
   }
 
-  async exportProject(projectId: string, format: 'html' | 'pdf' | 'pptx', opts: { withClicks?: boolean } = {}) {
+  async exportProject(
+    projectId: string,
+    format: 'html' | 'pdf' | 'pptx',
+    opts: { withClicks?: boolean; editable?: boolean } = {},
+  ) {
     const project = await this.requireProject(projectId);
     if (!project.headRevisionId) throw new EngineValidationError('No document to export');
     const head = await this.repo.getRevision(project.headRevisionId);
@@ -1162,10 +1209,7 @@ export class EngineService {
     // step into its own page/slide (S7). The default report keeps one page per
     // slide with everything revealed — i.e. exactly what the website shows.
     const withClicks = opts.withClicks ?? false;
-    const html =
-      head.source.find((f) => f.path === 'deck.html')?.content ??
-      presentationMeasureHtml(head.source) ??
-      '';
+    const html = await this.htmlForExport(head);
 
     if (format === 'html') {
       if (isSlidev) {
@@ -1173,6 +1217,21 @@ export class EngineService {
         return { buffer: Buffer.from(md, 'utf-8'), mime: 'text/markdown', filename: `${project.name}.md` };
       }
       return { buffer: Buffer.from(html, 'utf-8'), mime: 'text/html', filename: `${project.name}.html` };
+    }
+
+    // Text-layout gate on the same fitted HTML we are about to export. Kind-only
+    // facts always pass auditTextLayout — measure or the gate is theater.
+    if (!html.trim()) {
+      throw new EngineValidationError('文本版式预检失败：缺少可测量的演示文稿 HTML');
+    }
+    const textLayout = await runTextLayoutPreflight(html);
+    if (!textLayout.ok) {
+      throw new EngineValidationError(
+        `文本版式预检失败：${textLayout.audit.findings
+          .filter((f) => f.severity === 'hard')
+          .map((f) => f.message)
+          .join('；')}`,
+      );
     }
     if (format === 'pdf') {
       // Default: a *vector* page.pdf of the exact preview HTML → looks like /aoide/ AND
@@ -1185,7 +1244,20 @@ export class EngineService {
       return { buffer, mime: 'application/pdf', filename: `${project.name}.pdf` };
     }
 
-    // PPTX — image-based, full-bleed per slide, WYSIWYG with the preview.
+    // PPTX — default is image-based WYSIWYG. Opt-in native text frames via
+    // `opts.editable` or AUTOOFFICE_PPTX_EDITABLE=1 (scientific-illustrator track).
+    const wantEditable = opts.editable === true || isEditablePptxExportEnabled();
+    if (wantEditable) {
+      const spec = deckSpecFromAoHtml(html);
+      if (spec.slides.length > 0) {
+        const buffer = await renderEditablePptx(spec);
+        return {
+          buffer,
+          mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+          filename: `${project.name}.pptx`,
+        };
+      }
+    }
     const buffer = await exportDeckPptxWysiwyg(html, { withClicks });
     return {
       buffer,

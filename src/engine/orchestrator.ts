@@ -36,7 +36,7 @@ import {
 } from './revisions.js';
 import { assertValid, editIntentSchema } from './schema.js';
 import { buildReplaceTextIntent } from './latex/patch.js';
-import { buildDeckBoxes, buildPdfBoxes, buildSlidevDeckBoxes, pageCountOf } from './boxmap.js';
+import { buildDeckBoxes, buildPdfBoxes, buildSlidevDeckBoxes, pageCountOf, presentationMeasureHtml } from './boxmap.js';
 import { describeNode } from './labels.js';
 import { rankByRect, type ElementBox } from './html/hit-test.js';
 import { intersectionArea } from './coords.js';
@@ -66,6 +66,7 @@ import {
 import { applySourcePatch } from './latex/patch.js';
 import { htmlToPdfBuffer, measureDeckBoxes } from './render/deck.js';
 import { demoProfiles, resolveApplicableRules, runPreflight } from './standards/index.js';
+import { elementFactFromMeasuredBox, runTextLayoutPreflight } from './standards/preflight.js';
 import type { DocumentFacts } from './standards/types.js';
 
 export interface OrchestratorDeps {
@@ -643,22 +644,43 @@ async function runStandardsPreflight(
     docType: brief.docType,
     institution: brief.audience,
   });
-  const facts: DocumentFacts = {
-    kind: project.kind === 'pdf' ? 'pdf' : 'presentation',
-    pageWidthMm: project.kind === 'pdf' ? 210 : undefined,
-    pageHeightMm: project.kind === 'pdf' ? 297 : undefined,
-    slideCount: project.kind === 'presentation' ? 3 : undefined,
-    aspectRatio: project.kind === 'presentation' ? '16:9' : undefined,
-  };
+  const html =
+    project.kind === 'presentation' ? (presentationMeasureHtml(revision.source) ?? '') : '';
+  const layout = html
+    ? await runTextLayoutPreflight(html)
+    : runTextLayoutPreflight({
+        kind: project.kind === 'pdf' ? 'pdf' : 'presentation',
+      });
+  const facts: DocumentFacts = html
+    ? {
+        ...layout.facts,
+        pageWidthMm: project.kind === 'pdf' ? 210 : undefined,
+        pageHeightMm: project.kind === 'pdf' ? 297 : undefined,
+      }
+    : {
+        kind: project.kind === 'pdf' ? 'pdf' : 'presentation',
+        pageWidthMm: project.kind === 'pdf' ? 210 : undefined,
+        pageHeightMm: project.kind === 'pdf' ? 297 : undefined,
+        slideCount: project.kind === 'presentation' ? 3 : undefined,
+        aspectRatio: project.kind === 'presentation' ? '16:9' : undefined,
+      };
   const report = runPreflight(resolved, facts, deps.clock);
+  const ok = report.ok && layout.ok;
   await deps.repo.putVerificationRun({
     id: deps.idFactory('ver'),
     revisionId: revision.id,
-    checks: report.findings.map((f) => ({ name: f.ruleId, ok: f.ok, detail: f.message })),
-    ok: report.ok,
+    checks: [
+      ...report.findings.map((f) => ({ name: f.ruleId, ok: f.ok, detail: f.message })),
+      ...layout.audit.findings.map((f) => ({
+        name: `text-layout:${f.category}`,
+        ok: f.severity !== 'hard',
+        detail: f.message,
+      })),
+    ],
+    ok,
     createdAt: deps.clock(),
   });
-  await emit(deps.store, 'verification.completed', project.id, { ok: report.ok }, undefined);
+  await emit(deps.store, 'verification.completed', project.id, { ok }, undefined);
 }
 
 export async function buildDocumentFacts(project: Project, html: string): Promise<DocumentFacts> {
@@ -667,11 +689,6 @@ export async function buildDocumentFacts(project: Project, html: string): Promis
     kind: 'presentation',
     slideCount: html.match(/class="ao-slide"/g)?.length ?? 0,
     aspectRatio: '16:9',
-    elements: boxes.map((b) => ({
-      nodeId: b.nodeId,
-      type: 'element',
-      page: b.page,
-      boxNorm: { x: b.x, y: b.y, w: b.w, h: b.h },
-    })),
+    elements: boxes.map(elementFactFromMeasuredBox),
   };
 }

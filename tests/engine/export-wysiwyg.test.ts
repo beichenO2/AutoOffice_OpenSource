@@ -14,6 +14,8 @@ import JSZip from 'jszip';
 import { EngineService } from '../../src/engine/service.js';
 import { createDeterministicIdFactory } from '../../src/engine/ids.js';
 import { fixedClock } from '../../src/engine/clock.js';
+import { PREVIEW_FITTED_ATTR } from '../../src/engine/text-fit.js';
+import type { Project, Revision } from '../../src/engine/types.js';
 
 let dir: string;
 let svc: EngineService;
@@ -81,4 +83,104 @@ describe('WYSIWYG export (Playwright) — matches the live preview', () => {
     // Animated deck has v-click fragments → stepped export has strictly more slides.
     expect(steppedN).toBeGreaterThan(baseN);
   }, 60_000);
+});
+
+const FITTABLE_COPY =
+  '这是一段故意写得很长很长很长很长很长很长很长很长用来撑破幻灯片的中文段落需要缩小字号才能装进画布';
+
+function fittableOverflowHtml(): string {
+  const paras = Array.from(
+    { length: 14 },
+    (_, i) => `<p class="ao-el" data-ao-id="p${i}" data-ao-type="paragraph">${FITTABLE_COPY}${i}</p>`,
+  ).join('\n');
+  return `<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><style>
+html,body{margin:0}
+.ao-slide{
+  position:relative;width:1280px;height:720px;overflow:hidden;box-sizing:border-box;
+  padding:40px;--ao-body-font:48px;font-family:sans-serif;
+}
+.ao-slide > p{font-size:var(--ao-body-font,48px);line-height:1.3;margin:0 0 10px}
+.ao-slide[data-ao-fit] > p.ao-el{font-size:var(--ao-body-font,1.5vw)}
+</style></head>
+<body>
+<div class="ao-slide" data-ao-id="slide-1" data-ao-layout="content">${paras}</div>
+</body></html>`;
+}
+
+function cleanFittedHtml(): string {
+  return `<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><style>
+html,body{margin:0}
+.ao-slide{position:relative;width:1280px;height:720px;overflow:hidden;box-sizing:border-box}
+</style></head>
+<body ${PREVIEW_FITTED_ATTR}="1">
+<div class="ao-slide" data-ao-id="slide-1">
+  <p data-ao-id="ok" data-ao-type="text" style="position:absolute;left:80px;top:80px;width:400px;height:48px;font:16px/1.3 sans-serif">短句</p>
+</div>
+</body></html>`;
+}
+
+function clipHtml(): string {
+  const clip = '这是一段故意写得很长很长很长很长很长很长很长很长很长很长用来撑破窄单元格的中文';
+  return `<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><style>
+html,body{margin:0}
+.ao-slide{position:relative;width:1280px;height:720px;overflow:hidden;box-sizing:border-box}
+</style></head>
+<body>
+<div class="ao-slide">
+  <div data-ao-id="clip" data-ao-type="text" style="position:absolute;left:80px;top:80px;width:160px;height:36px;overflow:hidden;font:24px/1.3 sans-serif;white-space:nowrap">${clip}</div>
+</div>
+</body></html>`;
+}
+
+describe('exportProject — fit before preflight (GAP-3)', () => {
+  async function plantHtmlHead(html: string, renderHtml?: string): Promise<Project> {
+    const { project } = await svc.createProject('fit-export', 'presentation');
+    const rev: Revision = {
+      id: 'rev_fit_export',
+      projectId: project.id,
+      baseRevisionId: null,
+      origin: 'generation',
+      createdAt: 't0',
+      sourceHash: 'fit',
+      source: [{ path: 'deck.html', language: 'html', content: html }],
+      renderPath: await svc.store.writeRender(
+        project.id,
+        'rev_fit_export.html',
+        Buffer.from(renderHtml ?? html, 'utf-8'),
+      ),
+      renderMime: 'text/html',
+      renderStatus: 'rendered',
+      label: 'fit export fixture',
+    };
+    await svc.repo.putRevision(rev);
+    project.headRevisionId = rev.id;
+    project.lastGoodRevisionId = rev.id;
+    await svc.repo.putProject(project);
+    return project;
+  }
+
+  it('fits overflowing HTML before text-layout preflight and exports PDF', async () => {
+    const project = await plantHtmlHead(fittableOverflowHtml());
+    const pdf = await svc.exportProject(project.id, 'pdf');
+    expect(pdf.mime).toBe('application/pdf');
+    expect(pdf.buffer.subarray(0, 5).toString()).toBe('%PDF-');
+  }, 45_000);
+
+  it('html export of deck.html returns fitted bytes stamped with PREVIEW_FITTED_ATTR', async () => {
+    const project = await plantHtmlHead(fittableOverflowHtml());
+    const exp = await svc.exportProject(project.id, 'html');
+    const html = exp.buffer.toString('utf-8');
+    expect(html).toContain(PREVIEW_FITTED_ATTR);
+    expect(html).toMatch(/data-ao-fit="1"|--ao-body-font:\s*[\d.]+vw/);
+  }, 45_000);
+
+  it('reuses already-fitted render bytes (PREVIEW_FITTED_ATTR) instead of unfitted source', async () => {
+    const project = await plantHtmlHead(clipHtml(), cleanFittedHtml());
+    const pdf = await svc.exportProject(project.id, 'pdf');
+    expect(pdf.mime).toBe('application/pdf');
+    expect(pdf.buffer.subarray(0, 5).toString()).toBe('%PDF-');
+  }, 45_000);
 });

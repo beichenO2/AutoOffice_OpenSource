@@ -1,10 +1,12 @@
-import { appendFile, readFile, stat, rename, mkdir } from 'node:fs/promises';
-import { resolve, dirname } from 'node:path';
+import { appendFile, readFile, stat, rename, mkdir, readdir, unlink } from 'node:fs/promises';
+import { resolve, dirname, basename, join } from 'node:path';
 import type { LobsterEvent, LobsterEventType, LobsterSeverity } from './types.js';
 import { LOBSTER_EVENT_TYPES, LOBSTER_SEVERITIES } from './types.js';
 
 const SOURCE_PROJECT = 'AutoOffice';
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
+/** Keep only the newest N rotated shards under logs/lobster/ (plus the live file). */
+const MAX_ROTATED_SHARDS = 5;
 const DEDUP_WINDOW_MS = 60_000;
 
 let eventsFilePath: string | null = null;
@@ -13,7 +15,8 @@ const recentDedupKeys = new Map<string, number>();
 export function getEventsFilePath(): string {
   if (eventsFilePath) return eventsFilePath;
   const projectRoot = resolve(dirname(new URL(import.meta.url).pathname), '..', '..');
-  eventsFilePath = resolve(projectRoot, 'lobster-events.jsonl');
+  // Runtime telemetry only — never repo root clutter. Gitignored via logs/.
+  eventsFilePath = resolve(projectRoot, 'logs', 'lobster', 'events.jsonl');
   return eventsFilePath;
 }
 
@@ -44,12 +47,38 @@ function isDuplicate(dedupKey: string): boolean {
   return false;
 }
 
+async function pruneRotatedShards(dir: string, liveBase: string): Promise<void> {
+  // liveBase e.g. "events.jsonl" → shards "events.<ts>.jsonl"
+  const prefix = liveBase.replace(/\.jsonl$/, '.');
+  let names: string[];
+  try {
+    names = await readdir(dir);
+  } catch {
+    return;
+  }
+  const shards = names
+    .filter((n) => n.startsWith(prefix) && n.endsWith('.jsonl') && n !== liveBase)
+    .map((n) => {
+      const m = n.match(/\.(\d+)\.jsonl$/);
+      return { n, ts: m ? Number(m[1]) : 0 };
+    })
+    .sort((a, b) => b.ts - a.ts);
+  for (const old of shards.slice(MAX_ROTATED_SHARDS)) {
+    try {
+      await unlink(join(dir, old.n));
+    } catch {
+      // ignore prune races
+    }
+  }
+}
+
 async function rotateIfNeeded(filePath: string): Promise<void> {
   try {
     const s = await stat(filePath);
     if (s.size >= MAX_FILE_BYTES) {
       const rotated = filePath.replace(/\.jsonl$/, `.${Date.now()}.jsonl`);
       await rename(filePath, rotated);
+      await pruneRotatedShards(dirname(filePath), basename(filePath));
     }
   } catch {
     // File doesn't exist yet

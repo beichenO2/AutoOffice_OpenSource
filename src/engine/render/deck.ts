@@ -5,6 +5,7 @@ import { chromium, type Browser } from 'playwright';
 import { join } from 'node:path';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { applyFitLadderOnPage } from '../text-fit.js';
 
 let sharedBrowser: Browser | null = null;
 
@@ -58,9 +59,27 @@ export async function htmlToPdfBuffer(html: string): Promise<Buffer> {
   }
 }
 
-export async function measureDeckBoxes(html: string): Promise<
-  Array<{ nodeId: string; page: number; x: number; y: number; w: number; h: number }>
-> {
+/** Normalized [0,1] box on a slide, same space as `DocumentElementBox`. */
+export interface MeasuredNormBox {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** One `[data-ao-id]` measurement, including overflow signals for U11 audit. */
+export interface MeasuredDeckBox extends MeasuredNormBox {
+  nodeId: string;
+  page: number;
+  /** Nearest ancestor `[data-ao-id]` via `parentElement.closest`. */
+  parentId?: string;
+  /** Union of text Range bbox and scroll size, when measurable. */
+  contentBoxNorm?: MeasuredNormBox;
+  /** `scrollWidth/Height` exceeds `clientWidth/Height` by >1px. */
+  scrollOverflow?: boolean;
+}
+
+export async function measureDeckBoxes(html: string): Promise<MeasuredDeckBox[]> {
   const dir = await mkdtemp(join(tmpdir(), 'aoide-measure-'));
   const file = join(dir, 'deck.html');
   await writeFile(file, html, 'utf-8');
@@ -69,21 +88,125 @@ export async function measureDeckBoxes(html: string): Promise<
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
     await page.goto(`file://${file}`, { waitUntil: FILE_HTML_WAIT });
     const boxes = await page.evaluate(() => {
+      const EPS = 1;
+
+      function hideAbsForScrollMeasure(root: HTMLElement): () => void {
+        const undone: Array<() => void> = [];
+        root.querySelectorAll('*').forEach((child) => {
+          const pos = getComputedStyle(child).position;
+          if (pos !== 'absolute' && pos !== 'fixed') return;
+          const html = child as HTMLElement;
+          const prev = html.style.display;
+          html.style.display = 'none';
+          undone.push(() => {
+            html.style.display = prev;
+          });
+        });
+        const marker = 'data-ao-measure-inflow';
+        root.setAttribute(marker, '');
+        const style = document.createElement('style');
+        style.textContent = `[${marker}]::before,[${marker}]::after{display:none!important}`;
+        document.head.appendChild(style);
+        undone.push(() => {
+          root.removeAttribute(marker);
+          style.remove();
+        });
+        return () => {
+          for (const fn of undone.reverse()) fn();
+        };
+      }
+
+      function inflowScrollOverflow(el: HTMLElement): boolean {
+        const restore = hideAbsForScrollMeasure(el);
+        const extraW = el.scrollWidth - el.clientWidth;
+        const extraH = el.scrollHeight - el.clientHeight;
+        const cs = getComputedStyle(el);
+        const fontSize = parseFloat(cs.fontSize) || 16;
+        const parsedLh = parseFloat(cs.lineHeight);
+        const lineHeight = Number.isFinite(parsedLh) && parsedLh > 0 ? parsedLh : fontSize;
+        // Tight line-height (cover h1 is 1.05) lets CJK/Latin glyph ink sit
+        // several px outside the line box and inflate scrollHeight. That is not
+        // text failing to fit — require a quarter line-height of block overflow.
+        const blockSlop = Math.max(EPS, lineHeight * 0.25);
+        const overflow = extraW > EPS || extraH > blockSlop;
+        restore();
+        return overflow;
+      }
+
       const slides = Array.from(document.querySelectorAll('.ao-slide'));
-      const out: Array<{ nodeId: string; page: number; x: number; y: number; w: number; h: number }> = [];
+      const out: Array<{
+        nodeId: string;
+        page: number;
+        parentId?: string;
+        x: number;
+        y: number;
+        w: number;
+        h: number;
+        contentBoxNorm?: { x: number; y: number; w: number; h: number };
+        scrollOverflow?: boolean;
+      }> = [];
       slides.forEach((slide, idx) => {
         const slideRect = slide.getBoundingClientRect();
-        slide.querySelectorAll('[data-ao-id]').forEach((el) => {
+        const slideW = slideRect.width || 1;
+        const slideH = slideRect.height || 1;
+        slide.querySelectorAll('[data-ao-id]').forEach((node) => {
+          const el = node as HTMLElement;
           const id = el.getAttribute('data-ao-id');
           if (!id || el.getAttribute('data-ao-type') === 'slide') return;
+          const parentEl = el.parentElement?.closest('[data-ao-id]');
+          const parentId = parentEl?.getAttribute('data-ao-id') ?? undefined;
           const r = el.getBoundingClientRect();
-          out.push({
+          const cell = {
             nodeId: id,
             page: idx + 1,
-            x: (r.left - slideRect.left) / slideRect.width,
-            y: (r.top - slideRect.top) / slideRect.height,
-            w: r.width / slideRect.width,
-            h: r.height / slideRect.height,
+            x: (r.left - slideRect.left) / slideW,
+            y: (r.top - slideRect.top) / slideH,
+            w: r.width / slideW,
+            h: r.height / slideH,
+          };
+
+          let contentBoxNorm: { x: number; y: number; w: number; h: number } | undefined;
+          const text = (el.innerText || el.textContent || '').trim();
+          if (text) {
+            try {
+              const range = document.createRange();
+              range.selectNodeContents(el);
+              const tr = range.getBoundingClientRect();
+              if (tr.width > 0 && tr.height > 0) {
+                contentBoxNorm = {
+                  x: (tr.left - slideRect.left) / slideW,
+                  y: (tr.top - slideRect.top) / slideH,
+                  w: tr.width / slideW,
+                  h: tr.height / slideH,
+                };
+              }
+            } catch {
+              /* Range unavailable */
+            }
+          }
+
+          // Ignore abs-positioned descendants and ::before/::after (decorative tick).
+          const scrollOverflow = inflowScrollOverflow(el);
+          if (contentBoxNorm !== undefined && !scrollOverflow) {
+            // Glyph ink can sit a few px outside the padding box; do not treat that
+            // as content overflow when in-flow scroll is clean.
+            const left = Math.max(contentBoxNorm.x, cell.x);
+            const top = Math.max(contentBoxNorm.y, cell.y);
+            const right = Math.min(contentBoxNorm.x + contentBoxNorm.w, cell.x + cell.w);
+            const bottom = Math.min(contentBoxNorm.y + contentBoxNorm.h, cell.y + cell.h);
+            contentBoxNorm = {
+              x: left,
+              y: top,
+              w: Math.max(0, right - left),
+              h: Math.max(0, bottom - top),
+            };
+          }
+
+          out.push({
+            ...cell,
+            ...(parentId !== undefined ? { parentId } : {}),
+            scrollOverflow,
+            ...(contentBoxNorm !== undefined ? { contentBoxNorm } : {}),
           });
         });
       });
@@ -130,6 +253,7 @@ export async function captureDeckShots(
         /* fonts API absent — proceed */
       }
     });
+    await applyFitLadderOnPage(page, '.ao-slide');
     const slides = page.locator('.ao-slide');
     const count = await slides.count();
     const shots: Buffer[] = [];
@@ -231,6 +355,7 @@ export async function exportDeckPdfVector(html: string): Promise<Buffer> {
         /* fonts API absent — proceed */
       }
     });
+    await applyFitLadderOnPage(page, '.ao-slide');
     const pdf = await page.pdf({ printBackground: true, width: '1280px', height: '720px' });
     await page.close();
     return Buffer.from(pdf);

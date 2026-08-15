@@ -18,7 +18,7 @@ import { isAbsolute, join } from 'node:path';
 import type { NormRect, SemanticNode, SourceBox, SourceFile } from './types.js';
 import { describeNode } from './labels.js';
 import { parseDeck } from './html/dom.js';
-import { measureDeckBoxes } from './render/deck.js';
+import { measureDeckBoxes, type MeasuredDeckBox } from './render/deck.js';
 import { previewHtmlFromSource, SLIDES_MD } from './slidev/generate.js';
 
 /** A4 in PDF points — the paper `renderLatexDocument` emits (`a4paper`). */
@@ -228,10 +228,7 @@ export async function buildDeckBoxes(html: string): Promise<SourceBox[]> {
   }
 }
 
-function attachDeckLabels(
-  html: string,
-  measured: Array<{ nodeId: string; page: number; x: number; y: number; w: number; h: number }>,
-): SourceBox[] {
+function attachDeckLabels(html: string, measured: MeasuredDeckBox[]): SourceBox[] {
   const nodes = new Map(parseDeck(html).nodes.map((n) => [n.id, n]));
   return measured.map((m) => {
     const node = nodes.get(m.nodeId);

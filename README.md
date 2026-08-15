@@ -40,13 +40,15 @@ git clone https://github.com/beichenO2/AutoOffice.git && cd AutoOffice && npm ci
   previewed as the PDF itself. Both carry a box map of selectable coordinates.
 - **WYSIWYG Deck Export** — deck PDF is a vector Chromium print of the exact preview HTML, so
   text stays selectable and the file stays small. `?clicks=1` expands each `v-click` step into
-  its own page; PPTX is image-based, full-bleed, matching the preview. LaTeX projects export
-  their compiled PDF directly.
+  its own page; default PPTX is image-based, full-bleed, matching the preview. Set
+  `AUTOOFFICE_PPTX_EDITABLE=1` for an opt-in native-text PPTX (title/bullet frames, 16:9).
+  LaTeX projects export their compiled PDF directly.
 - **Data Grounding** — percentages, decimals and multi-digit numbers in the generated copy are
   string-checked against the supplied research and guidance and reported back when unsourced
   (single digits, formulas and images exempt).
-- **Adaptive Layout** — figure sizing follows content density; over-dense slides get their copy
-  condensed at natural sentence breaks before it lands in `slides.md`.
+- **Adaptive Layout** — figure sizing follows content density; over-dense slides wrap, tighten
+  type, and **paginate** (`paginateDeckSpec`, theme / line-budget) instead of truncating body
+  copy. Continuation titles use `（2/N）`. Optional editable PPTX: `AUTOOFFICE_PPTX_EDITABLE=1`.
 - **Desktop App** — `npm run app` for development, `npm run app:dist` for a `dmg` in `release/`.
   The desktop app bundles its own API child process on a random localhost port — a packaging
   exception that lives outside PolarManager governance.
@@ -88,6 +90,15 @@ PolarProcess is the only API lifecycle authority and PolarPort is the only port 
 Do not run `serve` directly, background it, or manage it with PID files. The production
 service is `autooffice` on `:3900`; the isolated agent preview is `autooffice-agent-preview`
 on `:3905`. Both serve `/api/engine/*` and `/aoide/`.
+
+## Docs & repository layout
+
+SSoT map: [`docs/ssot.md`](docs/ssot.md). Docs index: [`docs/README.md`](docs/README.md).
+
+Keep the root small (`src/` `tests/` `docs/` `_design/` `_report/` `deploy/` `integrations/`
+`vendor/` …). Planning and sessions live under `docs/`. Presenton is optional (`deploy/` +
+`PRESENTON_URL`), not vendored. Draw.io wrap: `integrations/scientific-illustrator/` around
+the `vendor/scientific-illustrator` pin. Lobster events: `logs/lobster/events.jsonl`.
 
 ## CLI Commands
 

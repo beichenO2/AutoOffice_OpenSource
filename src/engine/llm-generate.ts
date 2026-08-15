@@ -7,6 +7,7 @@
  */
 import { chatCompletion } from '../integrations/llm-proxy.js';
 import type { DeckSpec, SlideSpec, SlideElementSpec } from './html/generate.js';
+import { enforceDeckTextBudget, repairDeckTextBudget } from './text-budget.js';
 
 function parseJsonLoose(raw: string): Record<string, unknown> | null {
   try {
@@ -58,6 +59,7 @@ export async function llmGenerateDeckSpec(
       ? '必须严格按给定「大纲」组织页面顺序与主题，不要增删主线页；在每页内把内容做准确、详细的展开。'
       : `共约 ${n} 页：第 1 页为封面（一个标题 + 一句凝练副标题）；其余为内容页。`,
     '内容页每页一个小标题 + 3~6 条要点（bullets），或一段较详细的论述（paragraph）；可两者兼有。',
+    '文本预算铁律：内容页要点（bullets）最多 6 条；每条要点 ≤80 字（汉字/全角计 1）；论述（paragraph）≤280 字。超限须自行压缩，禁止灌水。',
     '严谨性铁律：所有数据、数字、时间、比例、结论必须来自「调研资料/指导」，忠实引用、不得杜撰或臆测；缺乏依据时给定性描述、不编造具体数字。要点要具体、有信息量、可核对。',
     opts.allowFormulas
       ? '公式排版铁律：所有独立数学公式一律放进该页 "formulas":["LaTeX公式"] 数组（标准 LaTeX，如 "E=mc^2"、"\\\\frac{\\\\partial L}{\\\\partial w}"、"\\\\int_0^1 x\\\\,dx"，会渲染为排版数学）；**不要把裸 LaTeX 直接写进 bullets/paragraph 正文**（会显示成源码）；正文若确需引用行内公式，务必用 $...$ 包裹（如 "半衰期 $t_{1/2}=\\\\frac{\\\\ln 2}{k_e}$"）。仅在数学/公式确有必要时给出，宁缺毋滥。'
@@ -93,7 +95,8 @@ export async function llmGenerateDeckSpec(
   if (slides[0]!.layout !== 'title') {
     slides.unshift({ title: deckTitle, layout: 'title', elements: [{ id: 'title', type: 'heading', text: deckTitle }] });
   }
-  return { title: deckTitle, slides };
+  const deck: DeckSpec = { title: deckTitle, slides };
+  return enforceDeckTextBudget(deck).ok ? deck : repairDeckTextBudget(deck);
 }
 
 /**

@@ -46,4 +46,17 @@ export type { ResolveContext } from './resolve.js';
 
 export { runPreflight, formatBasisCitation } from './preflight.js';
 
+export {
+  auditTextLayout,
+  DEFAULT_MIN_EDGE_MARGIN_NORM,
+  DEFAULT_ALIGNMENT_TOLERANCE_NORM,
+} from './text-layout-audit.js';
+export type {
+  TextLayoutFinding,
+  TextLayoutFindingCategory,
+  TextLayoutSeverity,
+  TextLayoutAuditResult,
+  TextLayoutAuditOptions,
+} from './text-layout-audit.js';
+
 export { demoRules, demoProfiles } from './fixtures.js';

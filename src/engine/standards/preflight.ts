@@ -11,7 +11,10 @@
  * the UI can jump to the node. Missing facts never fail silently: they show
  * up as visible "cannot check" info findings counted in `infos`.
  */
+import { measureDeckBoxes } from '../render/deck.js';
+import { auditTextLayout, type TextLayoutAuditResult } from './text-layout-audit.js';
 import type {
+  DocumentElementFact,
   DocumentFacts,
   PreflightFinding,
   PreflightReport,
@@ -292,6 +295,19 @@ const checkSlide: RuleChecker = (rule, facts) => {
 
 const BOX_EPSILON = 0.001;
 
+function contentExceedsCell(
+  content: { x: number; y: number; w: number; h: number },
+  cell: { x: number; y: number; w: number; h: number },
+  tol: number,
+): boolean {
+  return (
+    content.x < cell.x - tol ||
+    content.y < cell.y - tol ||
+    content.x + content.w > cell.x + cell.w + tol ||
+    content.y + content.h > cell.y + cell.h + tol
+  );
+}
+
 const checkTextOverflow: RuleChecker = (rule, facts) => {
   const elements = facts.elements;
   if (elements === undefined) return skip('缺少 elements 事实');
@@ -310,6 +326,24 @@ const checkTextOverflow: RuleChecker = (rule, facts) => {
           status: 'fail',
           nodeId: element.nodeId,
           message: `第 ${element.page} 页元素（${element.nodeId}）越出画布：box=(${box.x}, ${box.y}, ${box.w}, ${box.h})，要求完整落在 [0,1] 范围内`,
+        });
+        continue;
+      }
+    }
+    if (element.scrollOverflow === true) {
+      outcomes.push({
+        status: 'fail',
+        nodeId: element.nodeId,
+        message: `第 ${element.page} 页元素（${element.nodeId}）实测滚动溢出单元格`,
+      });
+      continue;
+    }
+    if (box !== undefined && element.contentBoxNorm !== undefined) {
+      if (contentExceedsCell(element.contentBoxNorm, box, BOX_EPSILON)) {
+        outcomes.push({
+          status: 'fail',
+          nodeId: element.nodeId,
+          message: `第 ${element.page} 页元素（${element.nodeId}）实测文本越出单元格`,
         });
         continue;
       }
@@ -452,4 +486,67 @@ export function runPreflight(
     ok: errors === 0,
     ranAt: clock !== undefined ? clock() : new Date().toISOString(),
   };
+}
+
+/** Thin re-export: Reviewer text-layout audit (measured boxes). */
+export { auditTextLayout } from './text-layout-audit.js';
+
+/** Measure box → DocumentElementFact, including overflow signals from Playwright. */
+export type MeasuredOverflowBox = {
+  nodeId: string;
+  page: number;
+  parentId?: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  contentBoxNorm?: { x: number; y: number; w: number; h: number };
+  scrollOverflow?: boolean;
+};
+
+export function elementFactFromMeasuredBox(box: MeasuredOverflowBox): DocumentElementFact {
+  return {
+    nodeId: box.nodeId,
+    type: 'element',
+    page: box.page,
+    ...(box.parentId !== undefined ? { parentId: box.parentId } : {}),
+    boxNorm: { x: box.x, y: box.y, w: box.w, h: box.h },
+    ...(box.contentBoxNorm !== undefined ? { contentBoxNorm: { ...box.contentBoxNorm } } : {}),
+    ...(box.scrollOverflow !== undefined ? { scrollOverflow: box.scrollOverflow } : {}),
+  };
+}
+
+export interface TextLayoutPreflightResult {
+  ok: boolean;
+  facts: DocumentFacts;
+  audit: TextLayoutAuditResult;
+}
+
+function finalizeTextLayoutPreflight(facts: DocumentFacts): TextLayoutPreflightResult {
+  const audit = auditTextLayout(facts);
+  return { ok: audit.ok, facts, audit };
+}
+
+async function runTextLayoutPreflightFromHtml(html: string): Promise<TextLayoutPreflightResult> {
+  const boxes = await measureDeckBoxes(html);
+  const facts: DocumentFacts = {
+    kind: 'presentation',
+    slideCount: html.match(/class="ao-slide"/g)?.length ?? 0,
+    aspectRatio: '16:9',
+    elements: boxes.map(elementFactFromMeasuredBox),
+  };
+  return finalizeTextLayoutPreflight(facts);
+}
+
+/**
+ * Deck text-layout preflight. Facts path is sync; HTML path measures then audits.
+ * `ok` is false iff auditTextLayout reports any hard finding (fail-closed).
+ */
+export function runTextLayoutPreflight(input: DocumentFacts): TextLayoutPreflightResult;
+export function runTextLayoutPreflight(input: string): Promise<TextLayoutPreflightResult>;
+export function runTextLayoutPreflight(
+  input: DocumentFacts | string,
+): TextLayoutPreflightResult | Promise<TextLayoutPreflightResult> {
+  if (typeof input === 'string') return runTextLayoutPreflightFromHtml(input);
+  return finalizeTextLayoutPreflight(input);
 }
