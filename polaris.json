@@ -2,7 +2,7 @@
   "name": "AutoOffice",
   "_meta": {
     "schema_version": "1.0",
-    "last_synced_at": "2026-08-15T18:30:00+08:00"
+    "last_synced_at": "2026-08-16T23:59:00+08:00"
   },
   "description": "AI 文档 IDE（aoide）+ 多格式自动化报告生成平台（PPT、PDF、Word、LaTeX、LaTeX-PDF、HTML）；Slidev 密文走换行+分页，含去AI化、摘要、RAG 增强、质量分析",
   "tier": "app",
@@ -479,6 +479,45 @@
       ],
       "test_status": "passed",
       "blockers": []
+    },
+    {
+      "id": "R8",
+      "need": "科研绘图 / scientific figure track：文字描述 + 可选手绘草图 → 可编辑 .drawio（mxGraph 原生对象），与 Slidev 文稿轨并列",
+      "approach": "POST /api/engine/figures（:3900，PolarProcess autooffice）。Designer（PolarPrivate V0000 视觉 QCSA，草图只理解不整贴）→ Drawer（未压缩 mxfile，1600×900）→ Audit（whole-sketch-raster hard fail）。Skill PolarSkills/ao-scientific-figure/SKILL.md；契约 src/engine/figure/types.ts + contracts/figure.schema.json。依赖 vendor/scientific-illustrator v1.5.4 + integrations/scientific-illustrator/。本切片不新开 Python、不做 PPT/WPS live。",
+      "status": "done",
+      "tech": {
+        "PolarPrivate": "V0000 视觉 QCSA",
+        "draw.io": "mxGraph 原生 .drawio",
+        "vendor/scientific-illustrator": "1.5.4"
+      },
+      "features": [
+        {
+          "name": "科研图轨（scientific figure）",
+          "status": "done",
+          "tech": [
+            "PolarPrivate V0000",
+            "draw.io mxfile 1600×900",
+            "vendor/scientific-illustrator 1.5.4"
+          ],
+          "interfaces": [
+            "POST /api/engine/figures"
+          ],
+          "behavior": [
+            "文稿 SoT 仍是 Slidev slides.md；科研图 SoT 是独立 .drawio（mxGraph 原生对象），并列不替换",
+            "prompt 必填；sketch?: { mime, data } raw base64 无 data: 前缀；可选 attachToProjectId / attachPage（1-based）挂已有 presentation media，不新开 kind",
+            "Designer（PolarPrivate V0000 视觉 QCSA，草图只理解不整贴）→ Drawer（未压缩 mxfile，1600×900）→ Audit（whole-sketch-raster hard fail）",
+            "禁生图：无 DALL·E / Flux / Midjourney / AutoFigure；预览若有则来自 draw.io Desktop CLI 导出；本切片 pipeline 不强制 previewPath",
+            "RELEASE_GRADE=no：引擎+契约+测试已绿，但不是发布级；本切片无 PPT/WPS live，不新开 Python",
+            "Skill PolarSkills/ao-scientific-figure/SKILL.md；契约 src/engine/figure/types.ts + contracts/figure.schema.json"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "2026-08-16: tests/engine/scientific-figure.test.ts 绿（Designer/Drawer/Audit + POST /api/engine/figures）",
+            "2026-08-16: landed in commit 448e0cb"
+          ]
+        }
+      ],
+      "blockers": []
     }
   ],
   "tech": {
@@ -511,7 +550,7 @@
     "notes": "SOTA Radar: PolarProcess cron `autooffice-sota-radar` Mon 09:00 → reports/sota-radar-*.md (read-only). Auto-Evolve: PolarProcess cron `autooffice-auto-evolve` every 3d 04:00 — QA-gated minor/patch npm upgrades via Agent_core/scripts/auto-evolve.mjs; no human approval; rollback on health fail."
   },
   "contacts": {
-    "last_updated": "2026-07-16T23:59:00+08:00",
+    "last_updated": "2026-08-16T23:59:00+08:00",
     "updated_by": "codex-runtime-governance"
   }
 }

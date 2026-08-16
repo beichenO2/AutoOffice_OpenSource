@@ -52,6 +52,15 @@ git clone https://github.com/beichenO2/AutoOffice.git && cd AutoOffice && npm ci
 - **Desktop App** — `npm run app` for development, `npm run app:dist` for a `dmg` in `release/`.
   The desktop app bundles its own API child process on a random localhost port — a packaging
   exception that lives outside PolarManager governance.
+- **Scientific figures** — a parallel track: deck SoT stays Slidev `slides.md`; figure SoT is a
+  standalone `.drawio` (native mxGraph objects). `POST /api/engine/figures` (`:3900`, PolarProcess
+  `autooffice`) takes required `prompt`, optional `sketch: { mime, data }` (raw base64, no `data:`
+  prefix), and optional `attachToProjectId` / `attachPage` (1-based) to hang on existing
+  presentation media — no new project kind. Designer uses PolarPrivate **V0000** (the sketch is
+  understood, never pasted whole); Drawer writes an uncompressed 1600×900 mxfile; Audit hard-fails
+  `whole-sketch-raster`. No DALL·E / Flux / Midjourney / AutoFigure. A preview, if present, is a
+  draw.io Desktop CLI export; this slice does not require `previewPath`. Skill:
+  `PolarSkills/ao-scientific-figure/SKILL.md`.
 
 ### Report Pipeline
 
@@ -81,6 +90,10 @@ curl -fsS -X POST http://127.0.0.1:3900/api/engine/decks -H 'Content-Type: appli
 # Same thing from the CLI, with a vector PDF written next to the preview
 node dist/cli.js generate-deck --topic "RAG in production" \
   --guidance facts.md --animate --out out/ --export pdf
+
+# Scientific figure → standalone .drawio (PolarPrivate V0000; sketch optional, never pasted)
+curl -fsS -X POST http://127.0.0.1:3900/api/engine/figures -H 'Content-Type: application/json' \
+  -d '{"prompt":"Three-layer neural net: input, hidden, output, labeled arrows"}'
 
 # Report pipeline
 node dist/cli.js batch -i data.json -f pdf,docx,html -d output/
@@ -121,6 +134,7 @@ the `vendor/scientific-illustrator` pin. Lobster events: `logs/lobster/events.js
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/decks` | POST | Topic → deck; returns project, revision and grounding report |
+| `/figures` | POST | Text + optional sketch → audited `.drawio` (PolarPrivate V0000); optional attach to an existing presentation |
 | `/projects` | GET, POST | List projects; create a `pdf` / `presentation` project |
 | `/projects/:id/overview` | GET | Head state, revision timeline, annotations |
 | `/projects/:id/annotations` | POST | Box-select edit: normalized rect + instruction |
@@ -163,6 +177,7 @@ real `xelatex` / Slidev / LLM integration tests.
 src/
 ├── engine/        AI document IDE (aoide)
 │   ├── slidev/      slides.md as source of truth: generate, parse, patch, source map
+│   ├── figure/      scientific figure track: Designer → Drawer → Audit → standalone .drawio
 │   ├── latex/       LaTeX source: \aoNode generation, patching, xelatex compile
 │   ├── html/        self-contained preview HTML, MathML formulas, hit testing
 │   ├── render/      Chromium render, vector PDF and image-based PPTX export
@@ -194,7 +209,8 @@ TypeScript is on the roadmap.
 AutoOffice works standalone, but integrates with
 [KnowLever](https://github.com/beichenO2/KnowLever) for RAG content enrichment and
 [PolarPrivate](https://github.com/beichenO2/PolarPrivate) for the LLM proxy that backs deck
-authoring and box-select editing (de-AI processing is local rule-based, no LLM involved).
+authoring, box-select editing, and scientific-figure Designer (**V0000** visual QCSA; de-AI
+processing is local rule-based, no LLM involved).
 
 ## License
 

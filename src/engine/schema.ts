@@ -213,6 +213,27 @@ export const briefSchema: Schema = {
   },
 };
 
+export const figureRequestSchema: Schema = {
+  kind: 'object',
+  additional: false,
+  fields: {
+    prompt: { schema: { kind: 'string' } },
+    sketch: {
+      optional: true,
+      schema: {
+        kind: 'object',
+        additional: false,
+        fields: {
+          mime: { schema: { kind: 'string', minLength: 1 } },
+          data: { schema: { kind: 'string', minLength: 1 } },
+        },
+      },
+    },
+    attachToProjectId: { schema: { kind: 'string', minLength: 1 }, optional: true },
+    attachPage: { schema: { kind: 'number', min: 1, int: true }, optional: true },
+  },
+};
+
 export const imageInsertSchema: Schema = {
   kind: 'object',
   additional: false,

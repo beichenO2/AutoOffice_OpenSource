@@ -2,6 +2,8 @@
  * AutoOffice IDE Engine — HTTP-facing service facade.
  * Delegates generation/edit orchestration to {@link ./orchestrator.js}.
  */
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { EngineStore } from './store.js';
 import { Repo } from './repo.js';
 import { engineStoreRoot } from './config.js';
@@ -27,7 +29,10 @@ import {
   mergeInlineStyle,
 } from './llm-edit.js';
 import { emitEvent, listEvents } from './events.js';
-import { assertValid, annotationCreateSchema, editIntentSchema, imageInsertSchema } from './schema.js';
+import { assertValid, annotationCreateSchema, editIntentSchema, figureRequestSchema, imageInsertSchema, SchemaError } from './schema.js';
+import { DesignSpecPageError } from './figure/designer.js';
+import { createFigure as createFigurePipeline } from './figure/pipeline.js';
+import type { FigureRequest, FigureResult } from './figure/types.js';
 import type { AgentTask, Annotation, Project, Revision, SourceBox, SourceFile, SourceMap } from './types.js';
 import { buildDeckBoxes, buildPdfBoxes, buildSlidevDeckBoxes, pageCountOf, presentationMeasureHtml } from './boxmap.js';
 import {
@@ -1005,6 +1010,75 @@ export class EngineService {
     });
     await emitEvent(this.store, 'revision.committed', project.id, { revisionId: committed.revision.id });
     return { revision: committed.revision, nodeId };
+  }
+
+  /**
+   * Scientific-figure track: Designer → Drawer → Audit → persist `.drawio`.
+   * Optional attach only runs when a real preview PNG/data URI already exists.
+   * Missing CLI / `NODE_ENV=test` skips preview; the figure still returns.
+   */
+  async createFigure(body: unknown): Promise<FigureResult> {
+    const raw = body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
+    const prompt = typeof raw.prompt === 'string' ? raw.prompt : '';
+    if (!prompt.trim()) {
+      throw new EngineValidationError('prompt is required and must be non-empty');
+    }
+    try {
+      assertValid(body, figureRequestSchema, 'figureRequest');
+    } catch (err) {
+      if (err instanceof SchemaError) {
+        throw new EngineValidationError(err.message);
+      }
+      throw err;
+    }
+
+    const request = raw as unknown as FigureRequest;
+    if (request.attachToProjectId) {
+      await this.requireProject(request.attachToProjectId);
+    }
+
+    let result: FigureResult;
+    try {
+      result = await createFigurePipeline(request, {
+        outputDir: join(this.store.root, 'figures'),
+      });
+    } catch (err) {
+      if (err instanceof DesignSpecPageError) {
+        throw new EngineValidationError(err.message);
+      }
+      if (err instanceof Error && /prompt/i.test(err.message)) {
+        throw new EngineValidationError(err.message);
+      }
+      throw err;
+    }
+
+    if (request.attachToProjectId) {
+      const src = await this.figurePreviewSrc(result);
+      if (src) {
+        await this.addImageElement(request.attachToProjectId, {
+          page: request.attachPage ?? 1,
+          src,
+          alt: result.designSpec.title || '科研图',
+        });
+      }
+    }
+    return result;
+  }
+
+  /** Real preview only — never invent a raster for attach. */
+  private async figurePreviewSrc(result: FigureResult): Promise<string | undefined> {
+    if (process.env.NODE_ENV === 'test') return undefined;
+    const preview = result.previewPath?.trim() ?? '';
+    if (!preview) return undefined;
+    if (/^data:image\//i.test(preview)) return preview;
+    if (!/\.(png|jpe?g|gif|webp|svg)$/i.test(preview)) return undefined;
+    try {
+      const buf = await readFile(preview);
+      const mime = preview.toLowerCase().endsWith('.svg') ? 'image/svg+xml' : 'image/png';
+      return `data:${mime};base64,${buf.toString('base64')}`;
+    } catch {
+      return undefined;
+    }
   }
 
   /** Resolve the src for an inserted image: explicit data/URL, colorCard, or a

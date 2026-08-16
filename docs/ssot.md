@@ -15,6 +15,7 @@
 | Runtime | `Start/` + polaris.json `service_management` | PolarManager |
 | Lobster events | `logs/lobster/events.jsonl` | gitignored（`/logs/`） |
 | Presenton opt-in | `deploy/` + `PRESENTON_URL` | 不入库；需时按 `deploy/README.md` clone |
+| Figure track types / skill | `src/engine/figure/types.ts` + `PolarSkills/ao-scientific-figure/SKILL.md` | 契约 `contracts/figure.schema.json`；进度 polaris R8 |
 
 ## 写法
 

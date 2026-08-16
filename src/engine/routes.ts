@@ -66,6 +66,27 @@ export function mountEngineRoutes(app: Express): void {
     res.status(201).json({ ok: true, ...(await svc.createProject(name.trim(), kind === 'presentation' ? 'presentation' : 'pdf')) });
   }));
 
+  app.post(`${base}/figures`, asyncHandler(async (req, res) => {
+    const prompt = typeof (req.body as { prompt?: unknown } | undefined)?.prompt === 'string'
+      ? (req.body as { prompt: string }).prompt
+      : '';
+    if (!prompt.trim()) {
+      jsonError(res, 400, 'invalid_prompt', 'prompt is required and must be non-empty');
+      return;
+    }
+    const svc = getEngineService();
+    const result = await svc.createFigure(req.body);
+    res.status(201).json({
+      ok: true,
+      figureId: result.figureId,
+      designSpec: result.designSpec,
+      drawioXml: result.drawioXml,
+      drawioPath: result.drawioPath,
+      audit: result.audit,
+      ...(result.previewPath ? { previewPath: result.previewPath } : {}),
+    });
+  }));
+
   // App entry: one-click "topic → full editable deck" (#1 button). Optionally
   // grounded by an outline + authoritative guidance + pre-chosen images, and may
   // allow LaTeX formulas (rendered as MathML). Returns the deck + a data-rigor

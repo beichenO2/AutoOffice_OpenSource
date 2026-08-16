@@ -18,6 +18,7 @@
 | **去 AI 化处理** | 规则化去除生成文本中的 AI 腔调，使输出更自然 |
 | **VLM 视觉质量评估** | 使用本地 VLM 评估文档排版质量，5 维度评分 |
 | **模板画廊** | 支持用户自定义模板，持久化到 ~/.autooffice/templates/ |
+| **科研图轨（并列 `.drawio`）** | 文稿 SoT 仍是 Slidev `slides.md`；科研图 SoT 是独立 draw.io 原生对象（mxGraph）。草图只进 PolarPrivate **V0000** 理解，禁止整张贴上画布（`whole-sketch-raster` hard fail），禁止 DALL·E / Flux / Midjourney / AutoFigure 生图 |
 
 ---
 
@@ -39,7 +40,7 @@
 
 ### 依赖
 
-- [PolarPrivate](../PolarPrivate/PolarSoul.md)：LLM 代理（127.0.0.1:12790），deck 生成与框选编辑
+- [PolarPrivate](../PolarPrivate/PolarSoul.md)：LLM 代理（127.0.0.1:12790），deck 生成与框选编辑；科研图 Designer 走视觉 QCSA **V0000**
 - [KnowLever](../KnowLever/PolarSoul.md)：RAG 增强
 
 ### 被依赖
@@ -50,6 +51,7 @@
 ### 接口契约
 
 - `/api/engine/decks`：主题一键生成整册
+- `/api/engine/figures`：科研图（`POST /api/engine/figures`：prompt + 可选 sketch → 独立 `.drawio`）
 - `/api/engine/projects/:id/annotations`：框选定点编辑
 - `/api/engine/projects/:id/export`：矢量 PDF / PPTX / 源文件导出
 - `/api/generate`：多格式生成
@@ -101,6 +103,19 @@ roadmap。
 
 **不可妥协**：报告管线（generate/batch）输出必须经过去 AI 化处理；aoide 引擎线以 grounding
 数据溯源 + 框选定点修正承担质量闭环，不强制走 deai 规则。
+
+### 为什么科研图是并列 `.drawio` 轨，而不是替换 Slidev、也不是生图？
+
+**问题**：科研插图需要可编辑的具名对象（面板、形状、连线），不是幻灯正文，也不是一张不可拆的位图。
+若把图写进 `slides.md` 或另开文生图，要么冲掉文稿 SoT，要么交出不可审计、不可定点改的像素。
+
+**决策**：文稿 SoT 仍是 Slidev `slides.md`；科研图 SoT 是并列的独立 `.drawio`（mxGraph 原生对象）。
+入口 `POST /api/engine/figures`（`:3900`，PolarProcess `autooffice`）：Designer 用 PolarPrivate
+**V0000** 理解文字与可选草图 → Drawer 写未压缩 mxfile（1600×900）→ Audit。草图只进 VLM，不整贴。
+预览若有，只来自 draw.io Desktop CLI 导出，本切片不强制 `previewPath`。不做 PPT/WPS live，不新开 Python。
+
+**不可妥协**：禁止 DALL·E / Flux / Midjourney / AutoFigure 生图；禁止把整张草图贴上画布
+（`whole-sketch-raster` hard fail）。不得用科研图轨替换 Slidev 文稿 SoT。
 
 ---
 

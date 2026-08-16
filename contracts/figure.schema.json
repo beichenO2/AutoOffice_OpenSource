@@ -1,0 +1,192 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "autooffice/figure",
+  "title": "AutoOffice Scientific Figure Request",
+  "description": "科研图轨输入：文字 + 可选手绘草图。根对象是 FigureRequest（prompt 必填）。DesignSpec / 对象 / 面板在 definitions，供解释器与抽屉校验。几何锁定 draw.io 页面 1600×900。禁止生图；禁止把整张草图贴成一张 image cell。",
+  "allOf": [{ "$ref": "#/definitions/FigureRequest" }],
+  "definitions": {
+    "FigureSketch": {
+      "type": "object",
+      "required": ["mime", "data"],
+      "additionalProperties": false,
+      "properties": {
+        "mime": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^image/",
+          "description": "草图 MIME，例如 image/svg+xml 或 image/png"
+        },
+        "data": {
+          "type": "string",
+          "minLength": 1,
+          "description": "草图字节的 raw base64，不含 data: 前缀"
+        }
+      }
+    },
+    "FigureRequest": {
+      "type": "object",
+      "required": ["prompt"],
+      "additionalProperties": false,
+      "properties": {
+        "prompt": {
+          "type": "string",
+          "minLength": 1,
+          "description": "科研图文字描述（必填）"
+        },
+        "sketch": {
+          "$ref": "#/definitions/FigureSketch"
+        },
+        "attachToProjectId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "可选：挂到已有 presentation 项目（路由/挂载留给后续单元）"
+        },
+        "attachPage": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "可选：挂载页码（1-based）"
+        }
+      }
+    },
+    "FigureObjectStyle": {
+      "type": "object",
+      "additionalProperties": {
+        "type": ["string", "number", "boolean"]
+      },
+      "properties": {
+        "fillColor": { "type": "string" },
+        "strokeColor": { "type": "string" },
+        "fontColor": { "type": "string" },
+        "fontSize": { "type": "number" },
+        "shape": { "type": "string" },
+        "align": { "type": "string" },
+        "verticalAlign": { "type": "string" }
+      }
+    },
+    "FigureObjectSpec": {
+      "type": "object",
+      "required": ["id", "kind", "x", "y", "w", "h"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "kind": {
+          "type": "string",
+          "enum": ["text", "shape", "connector", "table", "atomic-raster"]
+        },
+        "label": { "type": "string" },
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "w": { "type": "number", "exclusiveMinimum": 0 },
+        "h": { "type": "number", "exclusiveMinimum": 0 },
+        "style": { "$ref": "#/definitions/FigureObjectStyle" },
+        "text": { "type": "string" },
+        "sourceId": { "type": "string", "minLength": 1 },
+        "targetId": { "type": "string", "minLength": 1 },
+        "rasterReason": {
+          "type": "string",
+          "enum": [
+            "irreducible-photo",
+            "irreducible-micrograph",
+            "irreducible-plot-field",
+            "other-atomic",
+            ""
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "kind": { "const": "connector" } },
+            "required": ["kind"]
+          },
+          "then": {
+            "required": ["sourceId", "targetId"]
+          }
+        },
+        {
+          "if": {
+            "properties": { "kind": { "const": "atomic-raster" } },
+            "required": ["kind"]
+          },
+          "then": {
+            "required": ["rasterReason"],
+            "properties": {
+              "rasterReason": {
+                "type": "string",
+                "enum": [
+                  "irreducible-photo",
+                  "irreducible-micrograph",
+                  "irreducible-plot-field",
+                  "other-atomic"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "FigurePanelSpec": {
+      "type": "object",
+      "required": ["id", "title", "objects"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "objects": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/FigureObjectSpec" }
+        }
+      }
+    },
+    "FigureAmbiguity": {
+      "type": "object",
+      "required": ["id", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "message": { "type": "string", "minLength": 1 },
+        "objectIds": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "DesignSpec": {
+      "type": "object",
+      "required": [
+        "title",
+        "pageWidth",
+        "pageHeight",
+        "panels",
+        "ambiguities",
+        "sourcePrompt",
+        "sketchUsed"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "title": { "type": "string", "minLength": 1 },
+        "pageWidth": {
+          "type": "number",
+          "const": 1600,
+          "description": "draw.io 页面宽度，本切片锁定 1600"
+        },
+        "pageHeight": {
+          "type": "number",
+          "const": 900,
+          "description": "draw.io 页面高度，本切片锁定 900"
+        },
+        "panels": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/definitions/FigurePanelSpec" }
+        },
+        "ambiguities": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/FigureAmbiguity" }
+        },
+        "sourcePrompt": { "type": "string", "minLength": 1 },
+        "sketchUsed": { "type": "boolean" }
+      }
+    }
+  }
+}

@@ -20,6 +20,7 @@
 | R4 | HTTP API 服务与外部工具集成 | 100% | 全部 done |
 | R5 | AI 驱动 PPT 生成（Presenton 集成） | 100% | 全部 done |
 | R6 | VLM 视觉质量评估 | 100% | 全部 done |
+| R8 | 科研绘图 / scientific figure track | 引擎+契约+测试已绿 | `POST /api/engine/figures` + Skill + Audit；**RELEASE_GRADE=no**（preview CLI 可选，本切片无 PPT/WPS live） |
 
 ## aoide 引擎（整线入库，尚未在 polaris.json 立 Requirement）
 
@@ -36,7 +37,7 @@
 | text-fit ladder | 已入库 | 预览实测溢出后下调 `--ao-body-font` 至可读下限（`src/engine/text-fit.ts`） |
 | text-layout audit | 已入库 | `auditTextLayout`：重叠/溢出/过密框的标准预检 |
 | 可编辑 PPTX（opt-in） | 已入库 | 默认仍是满幅位图；`AUTOOFFICE_PPTX_EDITABLE=1` 走原生文本框 |
-| scientific-illustrator pin | 已入库 | `vendor/scientific-illustrator` submodule（v1.5.4）；wrap 在 `integrations/scientific-illustrator/` |
+| 科研图轨已入库（API+Skill+audit） | 已入库 | 并列 `.drawio` SoT（不替换 Slidev）；`POST /api/engine/figures` + `PolarSkills/ao-scientific-figure/SKILL.md` + Audit（`whole-sketch-raster` hard fail）；PolarPrivate **V0000**。依赖仍是 `vendor/scientific-illustrator` v1.5.4 pin + `integrations/scientific-illustrator/` wrap。**RELEASE_GRADE=no**；preview 仅 draw.io Desktop CLI 可选；本切片无 PPT/WPS live |
 
 ## 已知阻塞项
 
@@ -69,3 +70,4 @@
 | 2026-08-02 | 校正陈旧项：study-review PDF 模板早已实现，端到端渲染实证通过，KnowLever R8 阻塞解除 |
 | 2026-08-11 | 重心校准：aoide 引擎整线入库并列表化，版本推进到 1.0.0，下一步改为 1.0 后展望 |
 | 2026-08-15 | 文字布局：6/80/280 预算 + `paginateDeckSpec` 密文分页 + text-fit / audit；可编辑 PPTX opt-in；sci-illustrator pin；Presenton 出库改 `deploy/`；lobster → `logs/lobster/` |
+| 2026-08-16 | 科研图轨入库：并列 `.drawio` SoT（不替换 Slidev）；`POST /api/engine/figures` + Skill + Audit；PolarPrivate V0000；禁生图/禁整贴；RELEASE_GRADE=no（preview CLI 可选，本切片无 PPT live） |
